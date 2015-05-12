@@ -16,7 +16,7 @@
 #define PARTY_COUNT 5
 #define PARTY_NAME_LENGTH 3
 #define VOTES_LENGTH 4
-#define MSG_SIZE 256
+#define MSG_SIZE 2048
 #define BACKLOG 5
 
 ssize_t bulk_read(int fd, char *buf, size_t count){
@@ -91,7 +91,9 @@ int main(int argc , char *argv[]){
     while(1){
 		scanf("%s",message);
 		if( bulk_write(sockfd, message, MSG_SIZE) < 0) ERR("send");
+		puts("A");
 		int r = bulk_read(sockfd, message, MSG_SIZE);
+		puts("B");
         if( r < 0) ERR("recv");
         else if(r == 0) break;
         puts(message);

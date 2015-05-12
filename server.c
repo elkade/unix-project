@@ -9,6 +9,7 @@
 #include <string.h>
 #include <time.h>
 #include <stdbool.h>
+#include <assert.h>
 
 #define ERR(source) (fprintf(stderr,"%s:%d\n",__FILE__,__LINE__),\
                      perror(source),kill(0,SIGKILL),\
@@ -16,7 +17,7 @@
 #define PARTY_COUNT 5
 #define PARTY_NAME_LENGTH 3
 #define VOTES_LENGTH 4
-#define MSG_SIZE 256
+#define MSG_SIZE 2048
 #define BACKLOG 5
 
 #define NAME_LENGTH 17
@@ -24,6 +25,7 @@
 #define INT_LENGTH 17
 #define ENUM_LENGTH 5
 #define MAX_DB_LINE_LENGTH 128
+#define CLIENT_DISPLAY_SIZE 128
 
 #define ADMIN_PORT 5555
 
@@ -69,14 +71,33 @@ client* new_client(char* name, bool is_active, tariff tariff_plan, int capacity,
 void delete_client(client* c){
 	free(c);
 }
-void display_client(client *c){
+void display_client(client *c, char* result){
 	if(c==NULL)
 		return;
-	printf("name:  %s",c->name);
-	printf("is active: %d",c->is_active);
-	printf("tariff plan: %d",c->tariff_plan);
-	printf("capacity: %d",c->capacity);
-	printf("amount: %f",c->amount);
+	char buf[CLIENT_DISPLAY_SIZE];
+	bzero(result,CLIENT_DISPLAY_SIZE);
+	bzero(buf,CLIENT_DISPLAY_SIZE);
+	
+	snprintf(buf,CLIENT_DISPLAY_SIZE,"name:  %s\t",c->name);
+	strncat(result,buf, CLIENT_DISPLAY_SIZE);
+	bzero(buf,CLIENT_DISPLAY_SIZE);
+
+	snprintf(buf,CLIENT_DISPLAY_SIZE, "is active: %d\t",c->is_active);
+	strncat(result,buf,  CLIENT_DISPLAY_SIZE);
+	bzero(buf,CLIENT_DISPLAY_SIZE);
+	
+	snprintf(buf,CLIENT_DISPLAY_SIZE,"tariff plan: %d\t",c->tariff_plan);
+	strncat(result, buf, CLIENT_DISPLAY_SIZE);
+	bzero(buf,CLIENT_DISPLAY_SIZE);
+	
+	snprintf(buf,CLIENT_DISPLAY_SIZE,"capacity: %d\t",c->capacity);
+	strncat(result, buf, CLIENT_DISPLAY_SIZE);
+	bzero(buf,CLIENT_DISPLAY_SIZE);
+	
+	snprintf(buf,CLIENT_DISPLAY_SIZE,"amount: %.2f\n",c->amount);
+	strncat(result,buf, CLIENT_DISPLAY_SIZE);
+	bzero(buf,CLIENT_DISPLAY_SIZE);
+
 }
 int db_row_to_client(char* db_row, client* c ){
 	char buf[MAX_DB_LINE_LENGTH];
@@ -172,20 +193,57 @@ int db_select_client(char* name, client* c){
 
 	char buf[MAX_DB_LINE_LENGTH];
 	while (fgets (buf, sizeof(buf), f)) {
-		printf("line: %s\t%ld\n", buf, strlen(buf));
-			db_row_to_client(buf, c);
-			printf("name:%s\t%ld", c->name, strlen(c->name));
-			if(strcmp(name,c->name)==0){
-				printf("znaleziono");
-			if (c == NULL)
+		//printf("line: %s\t%ld\n", buf, strlen(buf));
+		db_row_to_client(buf, c);
+		//printf("name:%s\t%ld\n", c->name, strlen(c->name));
+		if(strcmp(name,c->name)==0){
+			printf("znaleziono");
+			if (c == NULL){
+				fclose(f);
 				return 1;
-			break;
-		}else{
+			}
+			fclose(f);
+			return 0;
 		}
+		bzero(c->name,NAME_LENGTH);
 	}
-	if (ferror(f)) {
-		fprintf(stderr,"Oops, error reading stdin\n");
-		abort();
+	puts("nie znaleziono");
+	fclose(f);
+	return 1;
+}
+int db_count_clients(){
+	FILE *f;
+	int count = 0;
+	f = fopen(CLIENTS_DB_NAME, "r");
+	if (f == NULL){
+		perror("Nie udalo sie otworzyc pliku notatki.txt");
+		return 1;
+	}
+
+	char buf[MAX_DB_LINE_LENGTH];
+	while (fgets (buf, sizeof(buf), f)) {
+		count++;
+	}
+	fclose(f);
+	return count;
+}
+int db_select_clients(client* clist, int n){//po tej funkcji trzeba zwalniać. zwraca liczbę elementów
+	FILE *f;
+	int i = 0;
+	f = fopen(CLIENTS_DB_NAME, "r");
+	if (f == NULL){
+		perror("Nie udalo sie otworzyc pliku notatki.txt");
+		return 1;
+	}
+	puts("Plik otwarty pomyslnie!");
+
+	char buf[MAX_DB_LINE_LENGTH];
+	while (fgets (buf, sizeof(buf), f)) {
+		bzero(clist[i].name,NAME_LENGTH);
+		db_row_to_client(buf, &clist[i++]);
+		bzero(buf,MAX_DB_LINE_LENGTH);
+		if(i>=n)
+			break;
 	}
 	fclose(f);
 	return 0;
@@ -250,9 +308,15 @@ int auth(char* input, role who){
 	return 1;
 }
 void handle_client(char* name){
-	client c;
-	if(db_select_client(name,&c)==1) return;
-	display_client(&c);
+	int i,  n = db_count_clients();
+	client c[n];
+	db_select_clients(c,n);
+	char buf[CLIENT_DISPLAY_SIZE];
+	for (i = 0; i < n; i++){
+		display_client(&c[i],buf);
+		puts(buf);
+	}
+	
 }
 
 int main(int argc, char** argv){
@@ -262,12 +326,12 @@ int main(int argc, char** argv){
 	return 0;
 	char in[NAME_LENGTH];
 	bzero(in,NAME_LENGTH);
-	client *c;
+	//client *c;
 	fgets(in,NAME_LENGTH, stdin);
-	c = new_client(in,true,SUBSCRIPTION,123,22.93);
-	db_insert_client(c);
+	//c = new_client(in,true,SUBSCRIPTION,123,22.93);
+	//db_insert_client(c);
 	handle_client(in);
-	delete_client(c);
+	//delete_client(c);
 	return 0;
 	if(auth(in, USER)==0){
 		puts("OK");
@@ -277,6 +341,55 @@ int main(int argc, char** argv){
 		puts("failed");
 	exit(EXIT_SUCCESS);
 }
+
+char** str_split(char* a_str, const char a_delim)
+{
+    char** result    = 0;
+    size_t count     = 0;
+    char* tmp        = a_str;
+    char* last_comma = 0;
+    char delim[2];
+    delim[0] = a_delim;
+    delim[1] = 0;
+
+    /* Count how many elements will be extracted. */
+    while (*tmp)
+    {
+        if (a_delim == *tmp)
+        {
+            count++;
+            last_comma = tmp;
+        }
+        tmp++;
+    }
+
+    /* Add space for trailing token. */
+    count += last_comma < (a_str + strlen(a_str) - 1);
+
+    /* Add space for terminating null string so caller
+       knows where the list of returned strings ends. */
+    count++;
+
+    result = malloc(sizeof(char*) * count);
+
+    if (result)
+    {
+        size_t idx  = 0;
+        char* token = strtok(a_str, delim);
+
+        while (token)
+        {
+            assert(idx < count);
+            *(result + idx++) = strdup(token);
+            token = strtok(0, delim);
+        }
+        assert(idx == count - 1);
+        *(result + idx) = 0;
+    }
+
+    return result;
+}
+
 
 ssize_t bulk_read(int fd, char *buf, size_t count){
 	int c;
@@ -334,8 +447,23 @@ int create_socket(int port){
 }
 
 
-int admin_list_clients(char* arg, char* response){
-	puts("admin_list_clients");
+int admin_list_clients(char* response){
+	puts("admin_list_clients");//uwaga, bo liczba klientów może przekroczyć pojemmność wiadomości
+	char buf[CLIENT_DISPLAY_SIZE];
+	
+	
+	
+	int i,  n = db_count_clients();
+	client clist[n];
+	db_select_clients(clist,n);
+	
+	
+	bzero(buf,CLIENT_DISPLAY_SIZE);
+	for (i = 0; i < n; i++){
+		display_client(&clist[i],buf);
+		strncat(response,buf,CLIENT_DISPLAY_SIZE);
+		bzero(buf,CLIENT_DISPLAY_SIZE);
+	}
 	return 0;
 }
 int admin_add_client(char* arg, char* response){
@@ -346,68 +474,76 @@ int admin_delete_client(char* arg, char* response){
 	puts("admin_delete_client");
 	return 0;
 }
-int admin_get_data_counters(char* arg, char* response){
+int admin_get_data_counters(char* response){
 	puts("admin_get_data_counters");
 	return 0;
 }
-int admin_start_new_sub_period(char* arg, char* response){
+int admin_start_new_sub_period(char* response){
 	puts("admin_start_new_sub_period");
 	return 0;
 }
-int admin_boost_prepaid(char* arg, char* response){
+int admin_boost_prepaid(char* name, char* amount , char* response){
 	puts("admin_boost_prepaid");
 	return 0;
 }
-int admin_lock_client(char* arg, char* response){
+int admin_lock_client(char* name, char* shall_lock, char* response){
 	puts("admin_lock_client");
 	return 0;
 }
-int admin_delete_service(char* arg, char* response){
+int admin_delete_service(char* name, char* response){
 	puts("admin_delete_service");
 	return 0;
 }
-int admin_add_service(char* arg, char* response){
+int admin_add_service(char* name, char* host, char* port, char* response){
 	puts("admin_add_service");
 	return 0;
 }
-int admin_list_services(char* arg, char* response){
+int admin_list_services(char* response){
 	puts("admin_list_services");
 	return 0;
 }
 int admin_handle_message(char* msg, char* response, bool is_authenticated){
 	int result = 0;
 	bzero(response,MSG_SIZE);
-	char *cmd = msg;
-	char *arg = NULL;
+	char *cmd;
+	char** args;
 	puts("admin_handle_message");
 	if(is_authenticated)
 		puts("authenticated");
-	//trzeba oddzielić polecenie od argumentów
+	
+	args = str_split(msg, ' ');//to nie jest dobrze bo nie sprawdzam, czy nie przyszedł syf
+	
+	cmd = args[0];
+	
 	if(!is_authenticated){
 		puts("authentication failed");
 		strcpy(response,"authentication failed");
 		result = 1;
+	}else if(cmd==NULL){
+		puts("wrong syntax");
+		strcpy(response,"wrong syntax");
+		result = 1;
 	}
 	else if(strcmp(cmd,"list_clients")==0)
-		result = admin_list_clients(arg, response);
+		result = admin_list_clients(response);
 	else if(strcmp(cmd,"add_client")==0)
-		result = admin_add_client(arg, response);
+		result = admin_add_client(args[1], response);
 	else if(strcmp(cmd,"delete_client")==0)
-		result = admin_delete_client(arg, response);
+		result = admin_delete_client(args[1], response);
 	else if(strcmp(cmd,"get_data_counters")==0)
-		result = admin_get_data_counters(arg, response);
+		result = admin_get_data_counters(response);
 	else if(strcmp(cmd,"start_new_sub_period")==0)
-		result = admin_start_new_sub_period(arg, response);
+		result = admin_start_new_sub_period(response);
 	else if(strcmp(cmd,"boost_prepaid")==0)
-		result = admin_boost_prepaid(arg, response);
+		result = admin_boost_prepaid(args[1], args[2], response);
 	else if(strcmp(cmd,"lock_client")==0)
-		result = admin_lock_client(arg, response);
+		result = admin_lock_client(args[1], args[2], response);
 	else if(strcmp(cmd,"list_services")==0)
-		result = admin_list_services(arg, response);
+		result = admin_list_services(response);
 	else if(strcmp(cmd,"delete_service")==0)
-		result = admin_delete_service(arg, response);
+		result = admin_delete_service(args[1],response);
 	else if(strcmp(cmd,"add_service")==0)
-		result = admin_add_service(arg, response);
+		result = admin_add_service(args[1], args[2], args[3],response);
 	else{
 		puts("unhandled message");
 		strcpy(response,"unhandled message");
