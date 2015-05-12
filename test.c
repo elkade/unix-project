@@ -27,6 +27,12 @@ typedef enum role{
 	OWNER
 }role;
 
+typedef struct service{
+	char name[16];
+	char host[16];
+	uint16_t port;
+}service;
+
 typedef enum tariff{
 	PREPAID,
 	SUBSCRIPTION
@@ -39,6 +45,21 @@ typedef struct client{
 	int capacity;
 	float amount;
 }client;
+
+client* new_client(char* name, bool is_active, tariff tariff_plan,
+		int capacity, float amount){
+	client *c = malloc(sizeof(client));
+	strncpy(c->name,name,NAME_LENGTH);
+	c->amount=amount;
+	c->capacity=capacity;
+	c->tariff_plan = tariff_plan;
+	c->is_active=is_active;
+	return c;
+}
+
+void delete_client(client* c){
+	free(c);
+}
 
 int db_row_to_client(char* db_row, client* c ){//powinno zwracać int
 	char buf[MAX_DB_LINE_LENGTH];
@@ -114,7 +135,7 @@ int client_to_db_row(client* c, char* buf){
 	return 0;
 }
 
-int insert_client(client* c){
+int db_insert_client(client* c){
 	FILE *f = fopen(CLIENTS_DB_NAME, "a");
 	char buf[MAX_DB_LINE_LENGTH];
 	client_to_db_row(c, buf);
@@ -125,7 +146,7 @@ int insert_client(client* c){
 	return 0;
 }
 
-int select_client(char* name, client* c){//zmienić na inta
+int db_select_client(char* name, client* c){
 	FILE *f;
 	printf("name: %s\t%ld\n", name, strlen(name));
 	f = fopen(CLIENTS_DB_NAME, "r");
@@ -156,7 +177,7 @@ int select_client(char* name, client* c){//zmienić na inta
 	return 0;
 }
 
-int delete_client(char* name){
+int db_delete_client(char* name){
 	FILE *oldTodoFile;
 	client c;
 
@@ -191,9 +212,9 @@ int delete_client(char* name){
 return 0;
 }
 
-int update_client(char* name, client* c){
-	if(delete_client(name)!=0) return 1;
-	if(insert_client(c)!=0) return 1;
+int db_update_client(char* name, client* c){
+	if(db_delete_client(name)!=0) return 1;
+	if(db_insert_client(c)!=0) return 1;
 	return 0;
 }
 
@@ -204,7 +225,7 @@ int auth(char* input, role who){
 	{
 		case USER:
 			//sprawdzić, czy input jest na liście klientów
-			if(select_client(input, &c)==0){
+			if(db_select_client(input, &c)==0){
 					//klient istnieje
 					return 0;
 				}
@@ -218,30 +239,31 @@ int auth(char* input, role who){
 	return 1;
 }
 
+void display_client(client *c){
+	if(c==NULL)
+		return;
+	printf("name:  %s",c->name);
+	printf("is active: %d",c->is_active);
+	printf("tariff plan: %d",c->tariff_plan);
+	printf("capacity: %d",c->capacity);
+	printf("amount: %f",c->amount);
+}
+
 void handle_client(char* name){
 	client c;
-	if(select_client(name,&c)==1) return;
-	printf("\nhello %s",c.name);
-	printf("\n%d",c.is_active);
-	printf("\n%d",c.tariff_plan);
-	printf("\n%d",c.capacity);
-	printf("\n%f",c.amount);
+	if(db_select_client(name,&c)==1) return;
+	display_client(&c);
 }
 
 int main(int argc, char** argv){
 	char in[NAME_LENGTH];
 	bzero(in,NAME_LENGTH);
-	client c;
+	client *c;
 	fgets(in,NAME_LENGTH, stdin);
-	strncpy(c.name,in,NAME_LENGTH);
-	c.amount=1.6;
-	c.capacity=45654;
-	c.tariff_plan = SUBSCRIPTION;
-	c.is_active=true;
-		printf("%s\t%ld\n",c.name,strlen(c.name));
-
-	//update_client("agfsaf",&c);
+	c = new_client(in,true,SUBSCRIPTION,123,22.93);
+	db_insert_client(c);
 	handle_client(in);
+	delete_client(c);
 	return 0;
 	if(auth(in, USER)==0){
 		puts("OK");
@@ -251,8 +273,4 @@ int main(int argc, char** argv){
 		puts("failed");
 	exit(EXIT_SUCCESS);
 }
-/*
- * 0000000000000006agfsaf000100010000000000045654000000000000000000000000000000000000000001.60
-0000000000000003qwe000100010000000000045654000000000000000000000000000000000000000001.60
-0000000000000004erte000100010000000000045654000000000000000000000000000000000000000001.60
- * */
+
