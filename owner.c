@@ -57,11 +57,7 @@ void usage(){
 	printf("./client <adres IPv4> <port> \n");
 	exit(EXIT_FAILURE);
 }
-void draw_votes(int* votes){
-	int i;
-	for (i = 0; i < PARTY_COUNT; i++)
-		votes[i] = 10 + random()%(1000-10);
-}
+
 int create_socket(char *hostname, int port){
 	struct sockaddr_in serv_addr;
     struct hostent *server;
@@ -85,20 +81,16 @@ int create_socket(char *hostname, int port){
     return s;
 }
 int main(int argc , char *argv[]){
-	char *parties[] = {"ABC", "CDE", "EFG", "GHI", "IJK"}, buf[MSG_SIZE], message[MSG_SIZE];
-	int votes[] = {0, 0, 0, 0, 0}, i, sockfd;
+	char message[MSG_SIZE];
+	int sockfd;
     //if(argc!=3) usage();
     if(sethandler(SIG_IGN,SIGPIPE)) ERR("Setting SIGPIPE:");
-    srand(time(NULL));
     sockfd = create_socket("127.0.0.1",atoi("5555"));
-	draw_votes(votes);
 	bzero(message,MSG_SIZE);
-	for (i = 0; i < PARTY_COUNT; i++){
-		snprintf(buf,MSG_SIZE - 1,"%s%04d",parties[i],votes[i]);
-		strncat(message, buf, MSG_SIZE - strlen(message) - 1);
-	}
 	if( bulk_write(sockfd, message, MSG_SIZE) < 0) ERR("send");
     while(1){
+		scanf("%s",message);
+		if( bulk_write(sockfd, message, MSG_SIZE) < 0) ERR("send");
 		int r = bulk_read(sockfd, message, MSG_SIZE);
         if( r < 0) ERR("recv");
         else if(r == 0) break;

@@ -33,7 +33,7 @@ static const char CLIENTS_DB_NAME_BUF[] = "clients_buf.txt";
 static const char SERVICES_DB_NAME[] = "services.txt";
 static const char SERVICES_DB_NAME_BUF[] = "services_buf.txt";
 
-void admin_process();
+void admin_listen();
 int sethandler( void (*f)(int), int);
 
 typedef enum role{
@@ -258,7 +258,7 @@ void handle_client(char* name){
 int main(int argc, char** argv){
 	if(sethandler(SIG_IGN,SIGPIPE))
 	    ERR("Setting SIGPIPE:");
-	admin_process();
+	admin_listen();
 	return 0;
 	char in[NAME_LENGTH];
 	bzero(in,NAME_LENGTH);
@@ -333,40 +333,132 @@ int create_socket(int port){
 	return sockfd;
 }
 
-int admin_handle_message(char* msg, char* response){
+
+int admin_list_clients(char* arg, char* response){
+	puts("admin_list_clients");
+	return 0;
+}
+int admin_add_client(char* arg, char* response){
+	puts("admin_add_client");
+	return 0;
+}
+int admin_delete_client(char* arg, char* response){
+	puts("admin_delete_client");
+	return 0;
+}
+int admin_get_data_counters(char* arg, char* response){
+	puts("admin_get_data_counters");
+	return 0;
+}
+int admin_start_new_sub_period(char* arg, char* response){
+	puts("admin_start_new_sub_period");
+	return 0;
+}
+int admin_boost_prepaid(char* arg, char* response){
+	puts("admin_boost_prepaid");
+	return 0;
+}
+int admin_lock_client(char* arg, char* response){
+	puts("admin_lock_client");
+	return 0;
+}
+int admin_delete_service(char* arg, char* response){
+	puts("admin_delete_service");
+	return 0;
+}
+int admin_add_service(char* arg, char* response){
+	puts("admin_add_service");
+	return 0;
+}
+int admin_list_services(char* arg, char* response){
+	puts("admin_list_services");
+	return 0;
+}
+int admin_handle_message(char* msg, char* response, bool is_authenticated){
 	int result = 0;
-	char *cmd;
-	char *arg;
+	bzero(response,MSG_SIZE);
+	char *cmd = msg;
+	char *arg = NULL;
+	puts("admin_handle_message");
+	if(is_authenticated)
+		puts("authenticated");
 	//trzeba oddzielić polecenie od argumentów
-	if(strcmp(cmd,"add_client")==0)
-		add_client(arg, response);
+	if(!is_authenticated){
+		puts("authentication failed");
+		strcpy(response,"authentication failed");
+		result = 1;
+	}
+	else if(strcmp(cmd,"list_clients")==0)
+		result = admin_list_clients(arg, response);
+	else if(strcmp(cmd,"add_client")==0)
+		result = admin_add_client(arg, response);
 	else if(strcmp(cmd,"delete_client")==0)
-		delete_client(arg, response);
+		result = admin_delete_client(arg, response);
 	else if(strcmp(cmd,"get_data_counters")==0)
-		get_data_counters(arg, response);
+		result = admin_get_data_counters(arg, response);
 	else if(strcmp(cmd,"start_new_sub_period")==0)
-		start_new_sub_period(arg, response);
+		result = admin_start_new_sub_period(arg, response);
 	else if(strcmp(cmd,"boost_prepaid")==0)
-		boost_prepaid(arg, response);
+		result = admin_boost_prepaid(arg, response);
 	else if(strcmp(cmd,"lock_client")==0)
-		lock_client(arg, response);
+		result = admin_lock_client(arg, response);
+	else if(strcmp(cmd,"list_services")==0)
+		result = admin_list_services(arg, response);
 	else if(strcmp(cmd,"delete_service")==0)
-		delete_service(arg, response);
+		result = admin_delete_service(arg, response);
 	else if(strcmp(cmd,"add_service")==0)
-		add_service(arg, response);
+		result = admin_add_service(arg, response);
 	else{
 		puts("unhandled message");
+		strcpy(response,"unhandled message");
 		result = 1;
 	}
 	return result;
 }
 
-void admin_process(){
+void admin_process(int sockfd, int fdmax){
+	char buf[MSG_SIZE];
+	fd_set afds;
+	int afd;//file descriptor admina
+	bool is_authenticated = false;
+	
+	if ((afd = TEMP_FAILURE_RETRY(accept(sockfd, NULL, NULL))) == -1)
+		ERR("Cannot accept connection");
+	FD_SET(afd, &afds);
+	puts("odebrano połączenie");
+	//przyszło połączenie od admina
+	while(true){//zmienić!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+		if (select(fdmax + 1, &afds, NULL, NULL, NULL) == -1){
+			if (errno != EINTR) ERR("Cannot select");
+			else if(stop){
+				close_all(afds, fdmax);
+				ERR("SIGINT");
+			}
+		}
+		puts("odebrano wiadomość");
+		//słucham państwa
+		if(bulk_read(afd,buf,MSG_SIZE)<0)
+			ERR("read");
+		puts(buf);
+		char response[MSG_SIZE];
+		if(!is_authenticated){
+			if((is_authenticated = (auth(buf,OWNER)==0)))
+				strcpy(response,"authentication successful");
+			else
+				strcpy(response,"authentication failed");//coś jest nie tak, bo mimo, że idzie admin, to pisze failed
+		}
+		else
+			admin_handle_message(buf, response, is_authenticated);
+		puts(response);
+		if(bulk_write(afd,response,MSG_SIZE)<0)
+			ERR("write");
+	}
+}
+
+void admin_listen(){
 	int sockfd = create_socket(ADMIN_PORT);
 	int fdmax = sockfd + 1;
-	char buf[MSG_SIZE];
-	//int i, clientcount = 0, msgcount = 0;
-	fd_set sfds, afds;
+	fd_set sfds;
 	FD_ZERO(&sfds);
 	FD_SET(sockfd, &sfds);
 	while (true){
@@ -378,31 +470,7 @@ void admin_process(){
 				ERR("SIGINT");
 			}
 		}
-		if (FD_ISSET(sockfd, &sfds)){
-			int afd;//file descriptor admina
-			if ((afd = TEMP_FAILURE_RETRY(accept(sockfd, NULL, NULL))) == -1)
-				ERR("Cannot accept connection");
-			FD_SET(afd, &afds);
-			puts("odebrano połączenie");
-			//przyszło połączenie od admina
-			while(true){//zmienić
-				if (select(fdmax + 1, &afds, NULL, NULL, NULL) == -1){
-					if (errno != EINTR) ERR("Cannot select");
-					else if(stop){
-						close_all(sfds, fdmax);
-						ERR("SIGINT");
-					}
-				}
-				puts("odebrano wiadomość");
-				//słucham państwa
-				if(bulk_read(afd,buf,MSG_SIZE)<0)
-					ERR("read");
-				puts(buf);
-				char response[MSG_SIZE];
-				admin_handle_message(buf, response);
-				if(bulk_write(afd,response,MSG_SIZE)<0)
-					ERR("write");
-			}
-		}
+		if (FD_ISSET(sockfd, &sfds))
+			admin_process(sockfd, fdmax);
 	}
 }
