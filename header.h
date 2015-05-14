@@ -3,7 +3,7 @@
 #include <stdio.h>
 #include <string.h>
 
-#define SIZE 8
+#define SIZE 128
 
 static struct termios old, new;
 
@@ -16,13 +16,11 @@ void initTermios(int echo)
   new.c_lflag &= echo ? ECHO : ~ECHO; /* set echo mode */
   tcsetattr(0, TCSANOW, &new); /* use these new terminal i/o settings now */
 }
-
 /* Restore old terminal i/o settings */
 void resetTermios(void) 
 {
   tcsetattr(0, TCSANOW, &old);
 }
-
 /* Read 1 character - echo defines echo mode */
 char getch_(int echo) 
 {
@@ -32,19 +30,16 @@ char getch_(int echo)
   resetTermios();
   return ch;
 }
-
 /* Read 1 character without echo */
 char getch(void) 
 {
   return getch_(0);
 }
-
 /* Read 1 character with echo */
 char getche(void) 
 {
   return getch_(1);
 }
-
 void delete(int n){
 	int i;
 	printf("%c[2K",27);
@@ -52,20 +47,15 @@ void delete(int n){
 		printf("\b");
 	}
 }
-
 void read_line(char* buf, int m){
 	static char inputs[SIZE][SIZE];
 	static int n;
 	char c;
 	int i=0, j=0, k=0;
 	bzero(buf,m);
-	
 	n++;
 	n %= SIZE;
-
-	strncpy(inputs[n],buf,SIZE);
-
-	
+	strncpy(inputs[n],buf,SIZE);	
 	while((c=getch())!='\n'){
 		if(c=='\033'){
 			delete(k);
@@ -85,6 +75,16 @@ void read_line(char* buf, int m){
 			delete(i);
 			printf("%s",buf);
 		}
+		else if(c==127){
+			delete(k);//to jest słabe
+			if(k>0)
+				k--;
+			if(i>0)
+				i--;
+			buf[i]='\0';
+			strncpy(inputs[n],buf,SIZE);
+			printf("%s",buf);
+		}
 		else{
 			k++;
 			printf("%c",c);
@@ -100,52 +100,45 @@ void read_line(char* buf, int m){
 	puts("");
 }
 
-//int main ( void ){
-	//char buf[8];
-	//while(1){
-	//read_line(buf,8);
-	//printf("%s\n",buf);
-	//}
-	//return 0;
-	//delete(3);
-	//char inputs[128][128];
-  //int ch, i = 0, n=0;
-////while ( (ch=getch()) != EOF )printf("%d\n",ch);
-  //do {
-//if ((ch=getch() )== '\033') { // if the first value is esc
-	////printf("%d\n",ch);
-	//fflush(stdin);
-    //if((ch=getch())!=91){
-		////printf("%d\n",ch);
-		//continue; // skip the [
-	//}
-    ////printf("%d\n",ch);
-    //switch((ch=getch())) { // the real value
-        //case 'A':
-            ////printf("A\n");
-            ////n++;
-            //if(n-i>=0)
-				//i++;
-			////printf("%c[2K", );
-
-            //printf("%sad%c[2K%c[2Kas",inputs[n-i],27,27);
-            //break;
-        //case 'B':
-            ////printf("B\n");
-            //break;
-        //case 'C':
-            ////printf("C\n");
-            //break;
-        //case 'D':
-            ////printf("D\n");
-            //break;
-    //}
-//}else{
-      //sprintf(inputs[n++],"%d\n",ch);
-      //printf("%d\n",ch);
- //i=0;}   }while ( 1);//( ch = get_code() ) != KEY_ESC 
-//printf("%d\n",ch);
-//puts("chuj");
-  //return 0;
-//}
-
+int trim(char* str, int n){
+	int i;
+	for (i = n -1; i >=0 ; i--){
+		if(str[i]==' ' || str[i]=='\n' || str[i]=='\t')
+			str[i]='\0';
+		else
+			break;
+	}
+	return 0;
+}
+ssize_t bulk_read(int fd, char *buf, size_t count){
+	int c;
+	size_t len=0;
+	do{
+		c=TEMP_FAILURE_RETRY(read(fd,buf,count));
+		if(c<0) return c;
+		if(0==c) return len;
+		buf+=c;
+		len+=c;
+		count-=c;
+	}while(count>0);
+	return len ;
+}
+ssize_t bulk_write(int fd, char *buf, size_t count){
+	int c;
+	size_t len=0;
+	do{
+		c=TEMP_FAILURE_RETRY(write(fd,buf,count));
+		if(c<0) return c;
+		buf+=c;
+		len+=c;
+		count-=c;
+	}while(count>0);
+	return len ;
+}
+int sethandler( void (*f)(int), int sigNo){
+	struct sigaction act;
+	memset(&act, 0, sizeof(struct sigaction));
+	act.sa_handler = f;
+	if (-1==sigaction(sigNo, &act, NULL)) return -1;
+	return 0;
+}
