@@ -87,13 +87,10 @@ int main(int argc , char *argv[]){
     if(sethandler(SIG_IGN,SIGPIPE)) ERR("Setting SIGPIPE:");
     sockfd = create_socket("127.0.0.1",atoi("5555"));
 	bzero(message,MSG_SIZE);
-	if( bulk_write(sockfd, message, MSG_SIZE) < 0) ERR("send");
     while(1){
-		scanf("%s",message);
+		fgets(message,MSG_SIZE,stdin);
 		if( bulk_write(sockfd, message, MSG_SIZE) < 0) ERR("send");
-		puts("A");
 		int r = bulk_read(sockfd, message, MSG_SIZE);
-		puts("B");
         if( r < 0) ERR("recv");
         else if(r == 0) break;
         puts(message);

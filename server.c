@@ -42,6 +42,10 @@ typedef enum role{
 	USER,
 	OWNER
 }role;
+typedef enum client_display_mode{
+	ALL,
+	COUNTERS
+}client_display_mode;
 typedef struct service{
 	char name[16];
 	char host[16];
@@ -71,7 +75,7 @@ client* new_client(char* name, bool is_active, tariff tariff_plan, int capacity,
 void delete_client(client* c){
 	free(c);
 }
-void display_client(client *c, char* result){
+void display_client(client *c, char* result, client_display_mode display_mode){
 	if(c==NULL)
 		return;
 	char buf[CLIENT_DISPLAY_SIZE];
@@ -81,23 +85,26 @@ void display_client(client *c, char* result){
 	snprintf(buf,CLIENT_DISPLAY_SIZE,"name:  %s\t",c->name);
 	strncat(result,buf, CLIENT_DISPLAY_SIZE);
 	bzero(buf,CLIENT_DISPLAY_SIZE);
-
-	snprintf(buf,CLIENT_DISPLAY_SIZE, "is active: %d\t",c->is_active);
-	strncat(result,buf,  CLIENT_DISPLAY_SIZE);
-	bzero(buf,CLIENT_DISPLAY_SIZE);
-	
-	snprintf(buf,CLIENT_DISPLAY_SIZE,"tariff plan: %d\t",c->tariff_plan);
-	strncat(result, buf, CLIENT_DISPLAY_SIZE);
-	bzero(buf,CLIENT_DISPLAY_SIZE);
-	
-	snprintf(buf,CLIENT_DISPLAY_SIZE,"capacity: %d\t",c->capacity);
-	strncat(result, buf, CLIENT_DISPLAY_SIZE);
-	bzero(buf,CLIENT_DISPLAY_SIZE);
-	
-	snprintf(buf,CLIENT_DISPLAY_SIZE,"amount: %.2f\n",c->amount);
-	strncat(result,buf, CLIENT_DISPLAY_SIZE);
-	bzero(buf,CLIENT_DISPLAY_SIZE);
-
+	if(display_mode==ALL){
+		snprintf(buf,CLIENT_DISPLAY_SIZE, "is active: %d\t",c->is_active);
+		strncat(result,buf,  CLIENT_DISPLAY_SIZE);
+		bzero(buf,CLIENT_DISPLAY_SIZE);
+	}
+	if(display_mode==ALL){
+		snprintf(buf,CLIENT_DISPLAY_SIZE,"tariff plan: %d\t",c->tariff_plan);
+		strncat(result, buf, CLIENT_DISPLAY_SIZE);
+		bzero(buf,CLIENT_DISPLAY_SIZE);
+	}
+	if(display_mode==ALL){
+		snprintf(buf,CLIENT_DISPLAY_SIZE,"capacity: %d\t",c->capacity);
+		strncat(result, buf, CLIENT_DISPLAY_SIZE);
+		bzero(buf,CLIENT_DISPLAY_SIZE);
+	}
+	if(display_mode==ALL || display_mode==COUNTERS){
+		snprintf(buf,CLIENT_DISPLAY_SIZE,"amount: %.2f\n",c->amount);
+		strncat(result,buf, CLIENT_DISPLAY_SIZE);
+		bzero(buf,CLIENT_DISPLAY_SIZE);
+	}
 }
 int db_row_to_client(char* db_row, client* c ){
 	char buf[MAX_DB_LINE_LENGTH];
@@ -251,7 +258,8 @@ int db_select_clients(client* clist, int n){//po tej funkcji trzeba zwalniać. z
 int db_delete_client(char* name){
 	FILE *oldTodoFile;
 	client c;
-
+	if(name==NULL)//poprawić, bo przy nullu segmentation fault
+		return 1;
 	oldTodoFile = fopen(CLIENTS_DB_NAME, "r");
 
 	FILE *todoFile;
@@ -271,6 +279,8 @@ int db_delete_client(char* name){
 				} else {
 					fputs(line, todoFile);
 				}
+						bzero(c.name,NAME_LENGTH);
+
 			}
 		}
 	} else {
@@ -313,7 +323,7 @@ void handle_client(char* name){
 	db_select_clients(c,n);
 	char buf[CLIENT_DISPLAY_SIZE];
 	for (i = 0; i < n; i++){
-		display_client(&c[i],buf);
+		display_client(&c[i],buf,ALL);
 		puts(buf);
 	}
 	
@@ -390,6 +400,16 @@ char** str_split(char* a_str, const char a_delim)
     return result;
 }
 
+int trim(char* str, int n){
+	int i;
+	for (i = n -1; i >=0 ; i--){
+		if(str[i]==' ' || str[i]=='\n' || str[i]=='\t')
+			str[i]='\0';
+		else
+			break;
+	}
+	return 0;
+}
 
 ssize_t bulk_read(int fd, char *buf, size_t count){
 	int c;
@@ -446,12 +466,24 @@ int create_socket(int port){
 	return sockfd;
 }
 
-
+int admin_info(char* response){
+	puts("admin_info");
+	strcat(response,"\ninfo\treturns the server functionality\n");
+	strcat(response,"list_clients\treturns the list of all clients\n");
+	strcat(response,"add_client <>\tdo zmiany\n");
+	strcat(response,"delete_client <name>\tremoves client from the list\n");
+	strcat(response,"get_data_counters\treturns counter values for all clients\n");
+	strcat(response,"boost_prepaid <name> <amount>\tincreases the prepaid amount for specific client\n");
+	strcat(response,"start_new_sub_period\treturns amounts and resets them for all clients with subscription\n");
+	strcat(response,"lock_client <name>\tlocks/unlocks the client\n");
+	strcat(response,"delete_service\tremoves the service from the list\n");
+	strcat(response,"add_service\tdo zmiany\n");
+	strcat(response,"list_services\tgets the list of all services\n");
+	return 0;
+}
 int admin_list_clients(char* response){
 	puts("admin_list_clients");//uwaga, bo liczba klientów może przekroczyć pojemmność wiadomości
 	char buf[CLIENT_DISPLAY_SIZE];
-	
-	
 	
 	int i,  n = db_count_clients();
 	client clist[n];
@@ -460,34 +492,80 @@ int admin_list_clients(char* response){
 	
 	bzero(buf,CLIENT_DISPLAY_SIZE);
 	for (i = 0; i < n; i++){
-		display_client(&clist[i],buf);
+		display_client(&clist[i],buf,ALL);
 		strncat(response,buf,CLIENT_DISPLAY_SIZE);
 		bzero(buf,CLIENT_DISPLAY_SIZE);
 	}
 	return 0;
 }
-int admin_add_client(char* arg, char* response){
+int admin_add_client(char* name,/* char* plan, char* capacity, */char* response){
 	puts("admin_add_client");
 	return 0;
 }
 int admin_delete_client(char* arg, char* response){
 	puts("admin_delete_client");
-	return 0;
+	printf("arg: %s\n\n",arg);
+	if(db_delete_client(arg)==0){
+		strcat(response,"client removed\n");
+		return 0;
+	}
+	else{
+		strcat(response,"delete failed\n");
+		return 1;
+	}
 }
 int admin_get_data_counters(char* response){
-	puts("admin_get_data_counters");
+	puts("admin_get_data_counters");//uwaga, bo liczba klientów może przekroczyć pojemmność wiadomości
+	char buf[CLIENT_DISPLAY_SIZE];
+	
+	int i,  n = db_count_clients();
+	client clist[n];
+	db_select_clients(clist,n);
+	
+	
+	bzero(buf,CLIENT_DISPLAY_SIZE);
+	for (i = 0; i < n; i++){
+		display_client(&clist[i],buf, COUNTERS);
+		strncat(response,buf,CLIENT_DISPLAY_SIZE);
+		bzero(buf,CLIENT_DISPLAY_SIZE);
+	}
 	return 0;
 }
 int admin_start_new_sub_period(char* response){
 	puts("admin_start_new_sub_period");
+	char buf[CLIENT_DISPLAY_SIZE];
+	
+	int i,  n = db_count_clients();
+	client clist[n];
+	db_select_clients(clist,n);
+	
+	
+	bzero(buf,CLIENT_DISPLAY_SIZE);
+	for (i = 0; i < n; i++){
+		if(clist[i].tariff_plan==SUBSCRIPTION){
+			display_client(&clist[i],buf, COUNTERS);
+			clist[i].amount = 0;
+			db_update_client(clist[i].name,&clist[i]);
+			strncat(response,buf,CLIENT_DISPLAY_SIZE);
+			bzero(buf,CLIENT_DISPLAY_SIZE);
+		}
+	}
 	return 0;
 }
 int admin_boost_prepaid(char* name, char* amount , char* response){
 	puts("admin_boost_prepaid");
+	client c;
+	db_select_client(name,&c);
+	c.amount+=atof(amount);
+	db_update_client(c.name,&c);
 	return 0;
 }
-int admin_lock_client(char* name, char* shall_lock, char* response){
+int admin_lock_client(char* name, char* response){
 	puts("admin_lock_client");
+	client c;
+	db_select_client(name,&c);
+	c.is_active=!c.is_active;
+	db_update_client(c.name,&c);
 	return 0;
 }
 int admin_delete_service(char* name, char* response){
@@ -524,6 +602,8 @@ int admin_handle_message(char* msg, char* response, bool is_authenticated){
 		strcpy(response,"wrong syntax");
 		result = 1;
 	}
+	else if(strcmp(cmd,"info")==0)
+		result = admin_info(response);
 	else if(strcmp(cmd,"list_clients")==0)
 		result = admin_list_clients(response);
 	else if(strcmp(cmd,"add_client")==0)
@@ -537,7 +617,7 @@ int admin_handle_message(char* msg, char* response, bool is_authenticated){
 	else if(strcmp(cmd,"boost_prepaid")==0)
 		result = admin_boost_prepaid(args[1], args[2], response);
 	else if(strcmp(cmd,"lock_client")==0)
-		result = admin_lock_client(args[1], args[2], response);
+		result = admin_lock_client(args[1], response);
 	else if(strcmp(cmd,"list_services")==0)
 		result = admin_list_services(response);
 	else if(strcmp(cmd,"delete_service")==0)
@@ -552,7 +632,7 @@ int admin_handle_message(char* msg, char* response, bool is_authenticated){
 	return result;
 }
 
-void admin_process(int sockfd, int fdmax){
+int admin_process(int sockfd, int fdmax){
 	char buf[MSG_SIZE];
 	fd_set afds;
 	int afd;//file descriptor admina
@@ -572,9 +652,14 @@ void admin_process(int sockfd, int fdmax){
 			}
 		}
 		puts("odebrano wiadomość");
-		//słucham państwa
-		if(bulk_read(afd,buf,MSG_SIZE)<0)
-			ERR("read");
+				//słucham państwa
+		if(bulk_read(afd,buf,MSG_SIZE)<0){
+			//ERR("read");
+			puts("connection lost");
+			return 1;
+		}
+		puts(buf);
+		trim(buf,strlen(buf));
 		puts(buf);
 		char response[MSG_SIZE];
 		if(!is_authenticated){
@@ -586,8 +671,11 @@ void admin_process(int sockfd, int fdmax){
 		else
 			admin_handle_message(buf, response, is_authenticated);
 		puts(response);
-		if(bulk_write(afd,response,MSG_SIZE)<0)
-			ERR("write");
+		if(bulk_write(afd,response,MSG_SIZE)<0){
+			//ERR("write");
+			puts("connection lost");
+			return 1;
+		}
 	}
 }
 
