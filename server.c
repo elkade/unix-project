@@ -14,20 +14,19 @@
 #define ERR(source) (fprintf(stderr,"%s:%d\n",__FILE__,__LINE__),\
                      perror(source),kill(0,SIGKILL),\
 		     		     exit(EXIT_FAILURE))
-#define PARTY_COUNT 5
-#define PARTY_NAME_LENGTH 3
-#define VOTES_LENGTH 4
+		     		     
 #define MSG_SIZE 2048
 #define BACKLOG 5
 
-#define NAME_LENGTH 17
-#define FLOAT_LENGTH 49
-#define INT_LENGTH 17
-#define ENUM_LENGTH 5
+#define NAME_LENGTH 16
+#define FLOAT_LENGTH 48
+#define INT_LENGTH 16
+#define ENUM_LENGTH 4
 #define MAX_DB_LINE_LENGTH 128
 #define CLIENT_DISPLAY_SIZE 128
 
 #define ADMIN_PORT 5555
+#define USER_PORT 5565
 
 volatile sig_atomic_t stop = 0;
 static const char CLIENTS_DB_NAME[] = "clients.txt";
@@ -35,6 +34,7 @@ static const char CLIENTS_DB_NAME_BUF[] = "clients_buf.txt";
 static const char SERVICES_DB_NAME[] = "services.txt";
 static const char SERVICES_DB_NAME_BUF[] = "services_buf.txt";
 
+int trim(char* str, int n);
 void admin_listen();
 int sethandler( void (*f)(int), int);
 
@@ -111,42 +111,42 @@ int db_row_to_client(char* db_row, client* c ){
 	bzero(buf,MAX_DB_LINE_LENGTH);
 	puts("DESERIALIZACJA\n");
 	
-	strncpy(buf,db_row,INT_LENGTH-1);
-		printf("buf: %s\n",buf);
+	strncpy(buf,db_row,INT_LENGTH);
+	//	printf("buf: %s\n",buf);
 
 	int offset = atoi(buf);
-	printf("offset: %d\n",offset);
-	strncpy(c->name,db_row+INT_LENGTH-1,offset);
+	//printf("offset: %d\n",offset);
+	strncpy(c->name,db_row+INT_LENGTH,offset);
 			printf("name: %s\n",c->name);
-	offset+=INT_LENGTH-1;
-		printf("offset: %d\n",offset);
+	offset+=INT_LENGTH;
+	//	printf("offset: %d\n",offset);
 	bzero(buf,MAX_DB_LINE_LENGTH);
-	strncpy(buf,db_row+offset,ENUM_LENGTH-1);
-			printf("buf2: %s\n",buf);
+	strncpy(buf,db_row+offset,ENUM_LENGTH);
+	//		printf("buf2: %s\n",buf);
 
 	c->is_active = atoi(buf);
-	offset+=ENUM_LENGTH-1;
+	offset+=ENUM_LENGTH;
 		bzero(buf,MAX_DB_LINE_LENGTH);
 
-	strncpy(buf,db_row+offset,ENUM_LENGTH-1);
-			printf("buf3: %s\n",buf);
+	strncpy(buf,db_row+offset,ENUM_LENGTH);
+	//		printf("buf3: %s\n",buf);
 
 	c->tariff_plan = atoi(buf);
-	offset+=ENUM_LENGTH-1;
+	offset+=ENUM_LENGTH;
 		bzero(buf,MAX_DB_LINE_LENGTH);
 
-	strncpy(buf,db_row+offset,INT_LENGTH-1);
-			printf("buf4: %s\n",buf);
+	strncpy(buf,db_row+offset,INT_LENGTH);
+	//		printf("buf4: %s\n",buf);
 
 	c->capacity = atoi(buf);
-	offset+=INT_LENGTH-1;
+	offset+=INT_LENGTH;
 		bzero(buf,MAX_DB_LINE_LENGTH);
 
-	strncpy(buf,db_row+offset,FLOAT_LENGTH-1);
-			printf("buf5: %s\n",buf);
+	strncpy(buf,db_row+offset,FLOAT_LENGTH);
+	//		printf("buf5: %s\n",buf);
 
 	c->amount = atof(buf);
-		puts("\nKONIEC\n");
+	//	puts("\nKONIEC\n");
 
 	return 0;
 }
@@ -156,24 +156,24 @@ int client_to_db_row(client* c, char* buf){
 	bzero(buf2,MAX_DB_LINE_LENGTH);
 		puts("SERIALIZACJA\n");
 
-	printf("%s\t%ld\n",c->name,strlen(c->name));
+	//printf("%s\t%ld\n",c->name,strlen(c->name));
 	
-	snprintf(buf2, INT_LENGTH, "%.*ld", INT_LENGTH-1 , strlen(c->name));
+	snprintf(buf2, INT_LENGTH+1, "%.*ld", INT_LENGTH , strlen(c->name));
 	strncat(buf,buf2,strlen(buf2));
 	bzero(buf2,MAX_DB_LINE_LENGTH);
-	snprintf(buf2, NAME_LENGTH, "%s", c->name);
+	snprintf(buf2, NAME_LENGTH+1, "%s", c->name);
 	strncat(buf,buf2,strlen(buf2));
 	bzero(buf2,MAX_DB_LINE_LENGTH);
-	snprintf(buf2, ENUM_LENGTH, "%.*d", ENUM_LENGTH-1, c->is_active);
+	snprintf(buf2, ENUM_LENGTH+1, "%.*d", ENUM_LENGTH, c->is_active);
 	strncat(buf,buf2,strlen(buf2));
 	bzero(buf2,MAX_DB_LINE_LENGTH);
-	snprintf(buf2, ENUM_LENGTH, "%.*d", ENUM_LENGTH-1, c->tariff_plan);
+	snprintf(buf2, ENUM_LENGTH+1, "%.*d", ENUM_LENGTH, c->tariff_plan);
 	strncat(buf,buf2,strlen(buf2));
 	bzero(buf2,MAX_DB_LINE_LENGTH);
-	snprintf(buf2, INT_LENGTH, "%.*d", INT_LENGTH-1, c->capacity);
+	snprintf(buf2, INT_LENGTH+1, "%.*d", INT_LENGTH, c->capacity);
 	strncat(buf,buf2,strlen(buf2));
 	bzero(buf2,MAX_DB_LINE_LENGTH);
-	snprintf(buf2, FLOAT_LENGTH + 1, "%0*.*f\n", FLOAT_LENGTH -1-2-1,2, c->amount);
+	snprintf(buf2, FLOAT_LENGTH + 2, "%0*.*f\n", FLOAT_LENGTH -1-2-1,2, c->amount);
 	strncat(buf,buf2,strlen(buf2));
 	bzero(buf2,MAX_DB_LINE_LENGTH);
 	return 0;
@@ -336,10 +336,11 @@ int main(int argc, char** argv){
 	return 0;
 	char in[NAME_LENGTH];
 	bzero(in,NAME_LENGTH);
-	//client *c;
+	client *c;
 	fgets(in,NAME_LENGTH, stdin);
-	//c = new_client(in,true,SUBSCRIPTION,123,22.93);
-	//db_insert_client(c);
+	trim(in,strlen(in));
+	c = new_client(in,true,SUBSCRIPTION,123,22.93);
+	db_insert_client(c);
 	handle_client(in);
 	//delete_client(c);
 	return 0;
