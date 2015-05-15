@@ -1,7 +1,7 @@
 #include "header.h"
 #include "client.h"
 #include "db.h"
-
+#include <pthread.h>
 volatile sig_atomic_t stop = 0;
 
 
@@ -50,7 +50,56 @@ void handle_client(char* name){
 	
 }
 
+void *thread_handler( void *ptr ){
+	int *pipeout = (int*)ptr, n = 16;
+	
+	char buf[n];
+	bzero(buf,n);
+	
+	fd_set curfds, fds;
+	
+	FD_ZERO(&fds);
+	FD_SET(*pipeout,&fds);
+	
+	while(true){
+		curfds = fds;
+		if (select(*(pipeout + 1), &curfds, NULL, NULL, NULL)<0)
+			ERR("select:");
+		if(FD_ISSET(*pipeout,&curfds)){
+			if(bulk_read(*pipeout,buf,16)<0)
+				ERR("read:");
+			printf("%s\n",buf);
+		}
+	}
+	if(TEMP_FAILURE_RETRY(close(*pipeout))<0)
+		ERR("close:");
+	return NULL;
+}
+
 int main(int argc, char** argv){
+	int pipefd[2], i, n=16;
+	int *pipein = pipefd + 1;
+	char buf[n];
+	bzero(buf,n);
+	if(pipe(pipefd))
+		ERR("pipe:");
+	
+	pthread_t thread;
+
+	if(pthread_create( &thread, NULL, thread_handler, (void*) pipefd))ERR("pthread:");
+	
+	for( i = 0; ; i++ ){
+		//sleep(1);
+		sprintf(buf,"%d\n",i);
+		if(bulk_write(*pipein,buf,16)<0)ERR("write:");
+	}
+	
+	pthread_join( thread, NULL);
+	
+	if(TEMP_FAILURE_RETRY(close(*pipein))<0)
+		ERR("close:");
+	
+	return 0;
 	if(sethandler(SIG_IGN,SIGPIPE))
 	    ERR("Setting SIGPIPE:");
 	user_listen();
@@ -405,7 +454,12 @@ int user_process(int sockfd, int fdmax){
 			}
 		}
 		puts("after select");
-		
+		//najpierw oczekuję wszystkich tak tak w kliencie
+		//odbieram wszystko z portu klienckiego / naliczam opłaty / przekazuje na bieżąco na serwisy w zależności od service_name
+		//odbieram wszystko od serwisów / naliczam opłaty / przekazuję na port kliencki w zależności od client_name
+		//
+		//naliczanie i przekazywanie dalej możnaby na osobnym wątku
+		//odbieram -> wsadzam na kolejkę
 	}
 }
 
