@@ -83,6 +83,36 @@ int addnewfd(int s, fd_set *fds, int *fdmax){
 	return fd;
 }
 
+void str_to_wrapped_message(char* message, wrapped_message *msg, int n){
+	
+	int offset=0;
+	char buf[MSG_SIZE];
+	//printf("%d\n",offset);
+	bzero(buf,MSG_SIZE);
+	
+	
+	strncpy(buf,message + offset,INT_LENGTH);
+	offset += INT_LENGTH;
+	//printf("%d\n",atoi(buf));
+	strncpy(msg->service_name,message+offset,atoi(buf));
+	offset+=atoi(buf);
+	//printf("%d\n",offset);
+	
+	bzero(buf,MSG_SIZE);
+	strncpy(buf,message + offset,INT_LENGTH);
+	offset += INT_LENGTH;
+	//printf("%d\n",atoi(buf));
+	strncpy(msg->client_name,message+offset,atoi(buf));
+	offset+=atoi(buf);
+	//printf("%d\n",offset);
+	
+	bzero(buf,MSG_SIZE);
+	strncpy(buf,message + offset,INT_LENGTH);
+	offset += INT_LENGTH;
+	//printf("%d\n",atoi(buf));
+	strncpy(msg->content,message+offset,atoi(buf));
+}
+
 void wrapped_message_to_str(char* buf, wrapped_message msg, int n){
 	char buf2[MSG_SIZE];
 	bzero(buf2,MSG_SIZE);
@@ -141,7 +171,8 @@ int main(int argc , char *argv[]){
 	bzero(name,NAME_LENGTH);
 	bzero(message,MSG_SIZE);
 
-	read_line(name,NAME_LENGTH);
+	strcpy(name,"aleksander");
+	//read_line(name,NAME_LENGTH);
 	
 	int select_all_number, select_one_number;
 	
@@ -157,13 +188,38 @@ start:
 			if( bulk_read(serverfd, message, MSG_SIZE) < 0) ERR("read");
 			puts("new message from server:");
 			puts(message);
+			//trzeba sparsować wiadomość
+			
+			wrapped_message msg_from_server;
+			memset(&msg_from_server,'\0',sizeof(msg_from_server));
+			str_to_wrapped_message(message,&msg_from_server,MSG_SIZE);
+			printf("%s\n",msg_from_server.service_name);
+			printf("%s\n",msg_from_server.client_name);
+			printf("%s\n",msg_from_server.content);
+			//trzeba sprawdzić, czy przyszła do dobrego klienta
+			
+			if(strcmp(msg_from_server.client_name,name)==0)
+				printf("dobry klient\n");
+			else
+				printf("zły klient\n");
+						
+			//a teraz trzeba ją wysłać tam gdzie trzeba
+			
+			for (i = 0; i < n; i++)
+				if(strcmp(endpoints[i].service_name,msg_from_server.service_name)==0){
+					puts("znaleziono");
+					for (j = 0; j <= fdmax ; j++)
+						if(FD_ISSET(j,&endpoints[i].fds) && j!=endpoints[i].sockfd)
+							if(bulk_write(j,msg_from_server.content,MSG_SIZE)<0)
+								ERR("write");//tu się wypierdala, bo nie zamykam socketów
+				}
 		}
 		if(select_all_number<=0) goto start;
 		for (i = 0; i < n; i++){
 			curfds = endpoints[i].fds;
 			if ((select_one_number = select(fdmax + 1, &curfds, NULL, NULL, &tt))<0) perror("select");//sprawdzam kolejne porty
 			if(select_one_number==0)continue;
-			for (j = 0; j < fdmax; j++){
+			for (j = 0; j <= fdmax; j++){
 				if(FD_ISSET(j,&curfds)){//coś jest
 					select_all_number--;
 					select_one_number--;
@@ -202,7 +258,7 @@ start:
 		}
 	}
 
-    if(TEMP_FAILURE_RETRY(close(serverfd))<0)ERR("close:");
+    if(TEMP_FAILURE_RETRY(close(serverfd))<0)ERR("close:");//zamykanie trzeba zrobić dobrze
     for (i = 0; i < n; i++){
 		if(TEMP_FAILURE_RETRY(close(endpoints[0].sockfd))<0)ERR("close:");
 	}

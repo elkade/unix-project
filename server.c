@@ -384,21 +384,24 @@ int user_process(int sockfd, int fdmax){
 	for(i=0;;i++){//zmienić!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 		snprintf(buf,16,"%d\n",i);
 		puts(buf);
-		if(bulk_write(afd,buf,MSG_SIZE)<0){
+		//if(bulk_write(afd,buf,MSG_SIZE)<0){
 			//ERR("write");
-			puts("connection lost");
-			return 1;
-		}
+		//	puts("connection lost");
+		//	return 1;
+		//}
 		sleep(1);
 		puts("before select");
 		curfds = afds;
 		if(select(fdmax + 2, &curfds, NULL, NULL, &tt)<0) perror("select");
 		for (j = 0; j < fdmax+2; j++){
 			if (FD_ISSET(j, &curfds)){
-				puts("before read");
 				bulk_read(afd,buf,MSG_SIZE);
 				puts(buf);
-				puts("after read");
+				if(bulk_write(afd,buf,MSG_SIZE)<0){
+					//ERR("write");
+					puts("connection lost");
+					return 1;
+				}
 			}
 		}
 		puts("after select");
