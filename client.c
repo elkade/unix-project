@@ -115,8 +115,9 @@ int main(int argc , char *argv[]){
 	int n = 1, i, j;//i to indeksator
 	local_endpoint endpoints[n];
 	int fdmax;
-	fd_set allfds, curfds;
+	fd_set allfds, curfds, serverfds;
 	FD_ZERO(&allfds);
+	FD_ZERO(&serverfds);
 	
 	if(sethandler(SIG_IGN,SIGPIPE)) ERR("Setting SIGPIPE:");
 	puts("before init");
@@ -128,75 +129,77 @@ int main(int argc , char *argv[]){
 		puts("after socket creation");
 		addnewfd_listen(endpoints[i].sockfd,&allfds,&fdmax);
 		puts("after adding new fd");
-		endpoints[i].connections_number = 0;
+		FD_ZERO(&endpoints[i].fds);
+		FD_SET(endpoints[i].sockfd,&endpoints[i].fds);
 	}
 	puts("after init");
 	int serverfd = create_socket_client("127.0.0.1",USER_PORT);
-	addnewfd_listen(serverfd,&allfds,&fdmax);
+	addnewfd_listen(serverfd,&serverfds,&fdmax);
+	FD_SET(serverfd,&allfds);
+	
 	puts("connected to server");
 	bzero(name,NAME_LENGTH);
 	bzero(message,MSG_SIZE);
 
 	read_line(name,NAME_LENGTH);
-		
-	for (curfds = allfds;; curfds = allfds){
-		//puts("czekam...");
-		if (select(fdmax + 1, &curfds, NULL, NULL, NULL) == -1)
-			if (errno != EINTR) ERR("Cannot select");
-		if (FD_ISSET(endpoints[0].sockfd, &curfds)){
-			puts("jest połączenie:");
-		}
+	
+	int select_all_number, select_one_number;
+	
+	struct timeval tt = {0,0};
+	while(true){
+start:
+		curfds = allfds;
+		if ((select_all_number = select(fdmax + 1, &curfds, NULL, NULL, NULL))<0) perror("select");//jest coś ale nie wiadomo co
+		curfds = serverfds;
+		if (select(fdmax + 1, &curfds, NULL, NULL, &tt)<0) perror("select");//sprawdzam serwer
 		if(FD_ISSET(serverfd,&curfds)){
+			select_all_number--;
 			if( bulk_read(serverfd, message, MSG_SIZE) < 0) ERR("read");
-			//puts("new message from server:");
-			//puts(message);
+			puts("new message from server:");
+			puts(message);
 		}
+		if(select_all_number<=0) goto start;
 		for (i = 0; i < n; i++){
-			printf("%s\n",endpoints[i].port_number);
-			if (FD_ISSET(endpoints[i].sockfd, &curfds)){//nowe połączenie na i-ty port
-				puts("new connection");
-				if(endpoints[i].connections_number + 1 < MAX_SOCKETS_TO_ONE_PORT){
-					endpoints[i].connected_sockets[endpoints[i].connections_number] = addnewfd(endpoints[i].sockfd,&allfds,&fdmax);
-					endpoints[i].connections_number++;
-				}
-				else
-					puts("too many connections");
-			}
-			for (j = 0; j < endpoints[i].connections_number; j++){
-				if (FD_ISSET(endpoints[i].connected_sockets[j], &curfds)){//jak połączenie się skończy to indeks przepada
-					int r = bulk_read(endpoints[i].connected_sockets[j], message, MSG_SIZE);
-					if( r < 0) ERR("recv");
-					else if(r == 0) {
-						FD_CLR(endpoints[i].connected_sockets[j],&allfds);
-						continue;
+			curfds = endpoints[i].fds;
+			if ((select_one_number = select(fdmax + 1, &curfds, NULL, NULL, &tt))<0) perror("select");//sprawdzam kolejne porty
+			if(select_one_number==0)continue;
+			for (j = 0; j < fdmax; j++){
+				if(FD_ISSET(j,&curfds)){//coś jest
+					select_all_number--;
+					select_one_number--;
+					if(j==endpoints[i].sockfd){//nowe połączenie
+						int newfd = addnewfd(endpoints[i].sockfd,&endpoints[i].fds,&fdmax);
+						FD_SET(newfd, &allfds);
 					}
-					puts("new message from app:");
-					puts(message);
-					//ubieram wiadomość i przesyłam do serwera
-					wrapped_message msg;
-					memset(&msg,'\0',sizeof(msg));
-					
-					strcpy(msg.service_name, endpoints[i].service_name);
-					strcpy(msg.client_name, name);
-					strcpy(msg.content,message);
-					
-					bzero(message,MSG_SIZE);
-					
-					wrapped_message_to_str(message,msg,MSG_SIZE);
-					puts(message);
-					if(bulk_write(serverfd,message,MSG_SIZE)<0)
-						ERR("write");
+					else{//nowa wiadomość
+						int r = bulk_read(j, message, MSG_SIZE);
+						if( r < 0) ERR("recv");
+						else if(r == 0) {
+							FD_CLR(j,&allfds);
+							continue;
+						}
+						puts("new message from app:");
+						puts(message);
+						//ubieram wiadomość i przesyłam do serwera
+						wrapped_message msg;
+						memset(&msg,'\0',sizeof(msg));
+						
+						strcpy(msg.service_name, endpoints[i].service_name);
+						strcpy(msg.client_name, name);
+						strcpy(msg.content,message);
+						
+						bzero(message,MSG_SIZE);
+						
+						wrapped_message_to_str(message,msg,MSG_SIZE);
+						puts(message);
+						if(bulk_write(serverfd,message,MSG_SIZE)<0)
+							ERR("write");
+						}
 				}
+				if(select_all_number<=0) goto start;
+				if(select_one_number<=0) continue;
 			}
 		}
-		
-
-			
-			//while(1){
-				//if( bulk_read(serverfd, message, MSG_SIZE) < 0) ERR("read");
-				//if( bulk_write(afd, message, MSG_SIZE) < 0) ERR("send");
-				//puts(message);
-		//}
 	}
 
     if(TEMP_FAILURE_RETRY(close(serverfd))<0)ERR("close:");

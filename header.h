@@ -48,8 +48,7 @@ typedef struct local_endpoint{
 	char port_number[PORT_NUMBER_LENGTH];
 	char service_name[SERVICE_NAME_LENGTH];
 	int sockfd;
-	int connected_sockets[MAX_SOCKETS_TO_ONE_PORT];
-	int connections_number;
+	fd_set fds;
 }local_endpoint;
 
 static struct termios old, new;
