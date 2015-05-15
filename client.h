@@ -1,5 +1,3 @@
-#define NAME_LENGTH 16
-
 #define CLIENT_DISPLAY_SIZE 128
 
 typedef enum client_display_mode{

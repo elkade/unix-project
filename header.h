@@ -1,9 +1,56 @@
+#define _GNU_SOURCE 
 #include <stdio.h> 
 #include <termios.h>
 #include <stdio.h>
 #include <string.h>
 
+#include <unistd.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <sys/wait.h>
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <errno.h>
+#include <string.h>
+#include <time.h>
+#include <stdbool.h>
+#include <assert.h>
+#define ERR(source) (fprintf(stderr,"%s:%d\n",__FILE__,__LINE__),\
+                     perror(source),kill(0,SIGKILL),\
+		     		     exit(EXIT_FAILURE))
+#define ADMIN_PORT 5555
+#define USER_PORT 5565     
+#define NAME_LENGTH 16
 #define SIZE 128
+#define MSG_SIZE 2048
+#define MSG_CONTENT_SIZE (2048-256)
+#define BACKLOG 5
+
+#define NAME_LENGTH 16
+#define FLOAT_LENGTH 48
+#define INT_LENGTH 16
+#define ENUM_LENGTH 4
+#define MAX_DB_LINE_LENGTH 128
+
+
+#define PORT_NUMBER_LENGTH 8
+#define SERVICE_NAME_LENGTH 16
+
+#define MAX_SOCKETS_TO_ONE_PORT 16
+
+typedef struct wrapped_message{
+	char service_name[SERVICE_NAME_LENGTH];
+	char client_name[NAME_LENGTH];
+	char content[MSG_SIZE];
+}wrapped_message;
+
+typedef struct local_endpoint{
+	char port_number[PORT_NUMBER_LENGTH];
+	char service_name[SERVICE_NAME_LENGTH];
+	int sockfd;
+	int connected_sockets[MAX_SOCKETS_TO_ONE_PORT];
+	int connections_number;
+}local_endpoint;
 
 static struct termios old, new;
 
@@ -142,3 +189,15 @@ int sethandler( void (*f)(int), int sigNo){
 	if (-1==sigaction(sigNo, &act, NULL)) return -1;
 	return 0;
 }
+int create_socket(int port){
+	struct sockaddr_in serv_addr;
+	int sockfd;
+	if ((sockfd = socket(AF_INET, SOCK_STREAM, 0)) < 0) ERR("socket:");
+	memset(&serv_addr, 0, sizeof(struct sockaddr_in));
+	serv_addr.sin_family = AF_INET;
+	serv_addr.sin_addr.s_addr = INADDR_ANY;
+	serv_addr.sin_port = htons(port);
+	if (bind(sockfd, (struct sockaddr *) &serv_addr, sizeof(serv_addr)) < 0) ERR("bind:");
+	if(listen(sockfd, BACKLOG) < 0) ERR("listen");
+	return sockfd;
+} 

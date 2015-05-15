@@ -1,8 +1,4 @@
-#define NAME_LENGTH 16
-#define FLOAT_LENGTH 48
-#define INT_LENGTH 16
-#define ENUM_LENGTH 4
-#define MAX_DB_LINE_LENGTH 128
+
 
 static const char CLIENTS_DB_NAME[] = "clients.txt";
 static const char CLIENTS_DB_NAME_BUF[] = "clients_buf.txt";

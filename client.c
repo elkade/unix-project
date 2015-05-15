@@ -1,162 +1,209 @@
-#include <stdio.h> 
-#include <termios.h>
+#define _GNU_SOURCE 
+#include <unistd.h>
 #include <stdio.h>
+#include <stdlib.h>
+#include <sys/wait.h>
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <errno.h>
 #include <string.h>
+#include <time.h>
+#include <netdb.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <unistd.h>
+#include <errno.h>
+#include <string.h>
+#include <sys/types.h>
+#include <sys/socket.h>
+#include <sys/un.h>
+#include <signal.h>
+#include "header.h"
 
-#define SIZE 8
+#define ERR(source) (fprintf(stderr,"%s:%d\n",__FILE__,__LINE__),\
+                     perror(source),kill(0,SIGKILL),\
+		     		     exit(EXIT_FAILURE))
+#define MSG_SIZE 2048
+#define BACKLOG 5
 
-static struct termios old, new;
 
-/* Initialize new terminal i/o settings */
-void initTermios(int echo) 
-{
-  tcgetattr(0, &old); /* grab old terminal i/o settings */
-  new = old; /* make new settings same as old settings */
-  new.c_lflag &= ~ICANON; /* disable buffered i/o */
-  new.c_lflag &= echo ? ECHO : ~ECHO; /* set echo mode */
-  tcsetattr(0, TCSANOW, &new); /* use these new terminal i/o settings now */
+
+void usage(){
+	printf("./client <adres IPv4> <port> \n");
+	exit(EXIT_FAILURE);
 }
 
-/* Restore old terminal i/o settings */
-void resetTermios(void) 
-{
-  tcsetattr(0, TCSANOW, &old);
+int create_socket_client(char *hostname, int port){
+	struct sockaddr_in serv_addr;
+    struct hostent *server;
+	int status, s = socket(AF_INET , SOCK_STREAM , 0);
+	socklen_t size = sizeof(int);
+	fd_set fds;
+    if (s == -1) ERR("socket");
+    if ((server = gethostbyname(hostname)) == NULL) ERR("gethostbyname");
+    memset(&serv_addr, 0, sizeof(struct sockaddr_in));
+    serv_addr.sin_addr = *(struct in_addr *) server->h_addr;
+    serv_addr.sin_family = AF_INET;
+    serv_addr.sin_port = htons(port);
+    if (connect(s, (struct sockaddr *) &serv_addr, sizeof(serv_addr)) == -1){
+		if (errno != EINTR)	ERR("connect");
+		FD_ZERO(&fds);
+		FD_SET(s, &fds);
+		if (TEMP_FAILURE_RETRY(select(s + 1, NULL, &fds, NULL, NULL)) == -1) ERR("select");
+		if (getsockopt(s, SOL_SOCKET, SO_ERROR, &status, &size) == -1) ERR("getsockopt");
+		if (status != 0) ERR("connect");
+	}
+    return s;
 }
 
-/* Read 1 character - echo defines echo mode */
-char getch_(int echo) 
-{
-  char ch;
-  initTermios(echo);
-  ch = getchar();
-  resetTermios();
-  return ch;
+void int_to_str(char* str, int n, int i){//zwraca z terminatorem więc dla 4 trzeba podać 5
+	char buf[n];
+	bzero(buf,n);
+	snprintf(buf,n,"%0*d",n-1,i);
+	strncpy(str,buf,n);
 }
 
-/* Read 1 character without echo */
-char getch(void) 
-{
-  return getch_(0);
+//local_endpoint local_endpoint_new(char* port_number, char* service_name, int socket_number){
+	//local_endpoint endpoint;
+	//endpoint.port_number
+//}
+
+int addnewfd_listen(int s, fd_set *fds, int *fdmax){
+	int fd = s;
+	FD_SET(fd, fds);
+	*fdmax = (*fdmax < fd) ? fd : *fdmax;
+	return fd;
 }
 
-/* Read 1 character with echo */
-char getche(void) 
-{
-  return getch_(1);
+int addnewfd(int s, fd_set *fds, int *fdmax){
+	int fd;
+	if ((fd = TEMP_FAILURE_RETRY(accept(s, NULL, NULL))) == -1)	ERR("Cannot accept connection");
+	FD_SET(fd, fds);
+	*fdmax = (*fdmax < fd) ? fd : *fdmax;
+	return fd;
 }
 
-void delete(int n){
-	int i;
-	printf("%c[2K",27);
+void wrapped_message_to_str(char* buf, wrapped_message msg, int n){
+	char buf2[MSG_SIZE];
+	bzero(buf2,MSG_SIZE);
+
+	snprintf(buf2, INT_LENGTH+1, "%.*ld", INT_LENGTH , strlen(msg.service_name));
+	strncat(buf,buf2,strlen(buf2));
+	bzero(buf2,MSG_SIZE);
+	snprintf(buf2, SERVICE_NAME_LENGTH+1, "%s", msg.service_name);
+	strncat(buf,buf2,strlen(buf2));
+	bzero(buf2,MSG_SIZE);
+	
+	snprintf(buf2, INT_LENGTH+1, "%.*ld", INT_LENGTH , strlen(msg.client_name));
+	strncat(buf,buf2,strlen(buf2));
+	bzero(buf2,MSG_SIZE);
+	snprintf(buf2, NAME_LENGTH+1, "%s", msg.client_name);
+	strncat(buf,buf2,strlen(buf2));
+	bzero(buf2,MSG_SIZE);
+	
+	snprintf(buf2, INT_LENGTH+1, "%.*ld", INT_LENGTH , strlen(msg.content));
+	strncat(buf,buf2,strlen(buf2));
+	bzero(buf2,MSG_SIZE);
+	snprintf(buf2, MSG_CONTENT_SIZE+1, "%s", msg.content);
+	strncat(buf,buf2,strlen(buf2));
+	bzero(buf2,MSG_SIZE);
+	}
+
+int main(int argc , char *argv[]){
+	char name[NAME_LENGTH];
+	char message[MSG_SIZE];
+	int n = 1, i, j;//i to indeksator
+	local_endpoint endpoints[n];
+	int fdmax;
+	fd_set allfds, curfds;
+	FD_ZERO(&allfds);
+	
+	if(sethandler(SIG_IGN,SIGPIPE)) ERR("Setting SIGPIPE:");
+	puts("before init");
 	for (i = 0; i < n; i++){
-		printf("\b");
+		int_to_str(endpoints[i].port_number,PORT_NUMBER_LENGTH,5578);
+		strncpy(endpoints[i].service_name,"multicast",SERVICE_NAME_LENGTH);
+		puts("before socket creation");
+		endpoints[i].sockfd = create_socket(atoi(endpoints[i].port_number));
+		puts("after socket creation");
+		addnewfd_listen(endpoints[i].sockfd,&allfds,&fdmax);
+		puts("after adding new fd");
+		endpoints[i].connections_number = 0;
 	}
-}
+	puts("after init");
+	int serverfd = create_socket_client("127.0.0.1",USER_PORT);
+	addnewfd_listen(serverfd,&allfds,&fdmax);
+	puts("connected to server");
+	bzero(name,NAME_LENGTH);
+	bzero(message,MSG_SIZE);
 
-void read_line(char* buf, int m){
-	static char inputs[SIZE][SIZE];
-	static int n;
-	char c;
-	int i=0, j=0, k=0;
-	bzero(buf,m);
-	
-	n++;
-	n %= SIZE;
-
-	strncpy(inputs[n],buf,SIZE);
-
-	
-	while((c=getch())!='\n'){
-		if(c=='\033'){
-			delete(k);
-			k=0;
-			bzero(buf,m);
-			i=0;
-			if((c=getch())!=91)
-				continue;
-			if((c=getch())=='A')
-				j=(j-1+SIZE)%SIZE;
-			else if(c=='B')
-				j=(j+1+SIZE)%SIZE;
-			else
-				continue;
-			strncpy(buf,inputs[(n+j+SIZE)%SIZE],SIZE);
-			i=k=strlen(buf);
-			delete(i);
-			printf("%s",buf);
+	read_line(name,NAME_LENGTH);
+		
+	for (curfds = allfds;; curfds = allfds){
+		//puts("czekam...");
+		if (select(fdmax + 1, &curfds, NULL, NULL, NULL) == -1)
+			if (errno != EINTR) ERR("Cannot select");
+		if (FD_ISSET(endpoints[0].sockfd, &curfds)){
+			puts("jest połączenie:");
 		}
-		else if(c==127){
-			delete(k);//to jest słabe
-			if(k>0)
-				k--;
-			if(i>0)
-				i--;
-			buf[i]='\0';
-			strncpy(inputs[n],buf,SIZE);
-			printf("%s",buf);
+		if(FD_ISSET(serverfd,&curfds)){
+			if( bulk_read(serverfd, message, MSG_SIZE) < 0) ERR("read");
+			//puts("new message from server:");
+			//puts(message);
 		}
-		else{
-			k++;
-			printf("%c",c);
-			if(i<m){
-				buf[i++]=c;
-				if(i<m)
-					buf[i]='\0';
+		for (i = 0; i < n; i++){
+			printf("%s\n",endpoints[i].port_number);
+			if (FD_ISSET(endpoints[i].sockfd, &curfds)){//nowe połączenie na i-ty port
+				puts("new connection");
+				if(endpoints[i].connections_number + 1 < MAX_SOCKETS_TO_ONE_PORT){
+					endpoints[i].connected_sockets[endpoints[i].connections_number] = addnewfd(endpoints[i].sockfd,&allfds,&fdmax);
+					endpoints[i].connections_number++;
+				}
+				else
+					puts("too many connections");
 			}
-			strncpy(inputs[n],buf,SIZE);
+			for (j = 0; j < endpoints[i].connections_number; j++){
+				if (FD_ISSET(endpoints[i].connected_sockets[j], &curfds)){//jak połączenie się skończy to indeks przepada
+					int r = bulk_read(endpoints[i].connected_sockets[j], message, MSG_SIZE);
+					if( r < 0) ERR("recv");
+					else if(r == 0) {
+						FD_CLR(endpoints[i].connected_sockets[j],&allfds);
+						continue;
+					}
+					puts("new message from app:");
+					puts(message);
+					//ubieram wiadomość i przesyłam do serwera
+					wrapped_message msg;
+					memset(&msg,'\0',sizeof(msg));
+					
+					strcpy(msg.service_name, endpoints[i].service_name);
+					strcpy(msg.client_name, name);
+					strcpy(msg.content,message);
+					
+					bzero(message,MSG_SIZE);
+					
+					wrapped_message_to_str(message,msg,MSG_SIZE);
+					puts(message);
+					if(bulk_write(serverfd,message,MSG_SIZE)<0)
+						ERR("write");
+				}
+			}
 		}
-	}
-	strncpy(inputs[n],buf,SIZE);
-	puts("");
-}
+		
 
-int main ( void ){
-	char buf[8];
-	while(1){
-	read_line(buf,8);
-	printf("%s\n",buf);
+			
+			//while(1){
+				//if( bulk_read(serverfd, message, MSG_SIZE) < 0) ERR("read");
+				//if( bulk_write(afd, message, MSG_SIZE) < 0) ERR("send");
+				//puts(message);
+		//}
 	}
-	return 0;
-	delete(3);
-	char inputs[128][128];
-  int ch, i = 0, n=0;
-//while ( (ch=getch()) != EOF )printf("%d\n",ch);
-  do {
-if ((ch=getch() )== '\033') { // if the first value is esc
-	//printf("%d\n",ch);
-	fflush(stdin);
-    if((ch=getch())!=91){
-		//printf("%d\n",ch);
-		continue; // skip the [
-	}
-    //printf("%d\n",ch);
-    switch((ch=getch())) { // the real value
-        case 'A':
-            //printf("A\n");
-            //n++;
-            if(n-i>=0)
-				i++;
-			//printf("%c[2K", );
 
-            printf("%sad%c[2K%c[2Kas",inputs[n-i],27,27);
-            break;
-        case 'B':
-            //printf("B\n");
-            break;
-        case 'C':
-            //printf("C\n");
-            break;
-        case 'D':
-            //printf("D\n");
-            break;
-    }
-}else{
-      sprintf(inputs[n++],"%d\n",ch);
-      printf("%d\n",ch);
- i=0;}   }while ( 1);//( ch = get_code() ) != KEY_ESC 
-printf("%d\n",ch);
-puts("chuj");
-  return 0;
+    if(TEMP_FAILURE_RETRY(close(serverfd))<0)ERR("close:");
+    for (i = 0; i < n; i++){
+		if(TEMP_FAILURE_RETRY(close(endpoints[0].sockfd))<0)ERR("close:");
+	}
+    exit(EXIT_SUCCESS);
 }
 
 

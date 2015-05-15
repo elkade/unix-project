@@ -1,33 +1,12 @@
-#define _GNU_SOURCE 
-#include <unistd.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <sys/wait.h>
-#include <sys/socket.h>
-#include <netinet/in.h>
-#include <errno.h>
-#include <string.h>
-#include <time.h>
-#include <stdbool.h>
-#include <assert.h>
 #include "header.h"
 #include "client.h"
 #include "db.h"
-#define ERR(source) (fprintf(stderr,"%s:%d\n",__FILE__,__LINE__),\
-                     perror(source),kill(0,SIGKILL),\
-		     		     exit(EXIT_FAILURE))
-		     		     
-#define MSG_SIZE 2048
-#define BACKLOG 5
-
-
-#define ADMIN_PORT 5555
-#define USER_PORT 5565
 
 volatile sig_atomic_t stop = 0;
 
 
 void admin_listen();
+void user_listen();
 
 typedef enum role{
 	USER,
@@ -74,6 +53,8 @@ void handle_client(char* name){
 int main(int argc, char** argv){
 	if(sethandler(SIG_IGN,SIGPIPE))
 	    ERR("Setting SIGPIPE:");
+	user_listen();
+	return 0;
 	admin_listen();
 	return 0;
 	char in[NAME_LENGTH];
@@ -151,19 +132,6 @@ void close_all(fd_set fds, int fdmax){
 			shutdown(i,SHUT_RDWR);
 			if(TEMP_FAILURE_RETRY(close(i))<0)ERR("close:");
 		}
-}
-
-int create_socket(int port){
-	struct sockaddr_in serv_addr;
-	int sockfd;
-	if ((sockfd = socket(AF_INET, SOCK_STREAM, 0)) < 0) ERR("socket:");
-	memset(&serv_addr, 0, sizeof(struct sockaddr_in));
-	serv_addr.sin_family = AF_INET;
-	serv_addr.sin_addr.s_addr = INADDR_ANY;
-	serv_addr.sin_port = htons(port);
-	if (bind(sockfd, (struct sockaddr *) &serv_addr, sizeof(serv_addr)) < 0) ERR("bind:");
-	if(listen(sockfd, BACKLOG) < 0) ERR("listen");
-	return sockfd;
 }
 
 int admin_info(char* response){
@@ -329,6 +297,7 @@ int admin_handle_message(char* msg, char* response, bool is_authenticated){
 		strcpy(response,"unhandled message");
 		result = 1;
 	}
+	free(args);
 	return result;
 }
 
@@ -350,7 +319,7 @@ int admin_process(int sockfd, int fdmax){
 				close_all(afds, fdmax);
 				ERR("SIGINT");
 			}
-		}
+		}//nieeeeeeeeeeeeeeeee jeeeeeeeeeeeeeest dddddddddddddddobrze curfds
 		puts("odebrano wiadomość");
 				//słucham państwa
 		if(bulk_read(afd,buf,MSG_SIZE)<0){
@@ -396,5 +365,63 @@ void admin_listen(){
 		}
 		if (FD_ISSET(sockfd, &sfds))
 			admin_process(sockfd, fdmax);
+	}
+}
+
+
+int user_process(int sockfd, int fdmax){
+	char buf[MSG_SIZE];
+	fd_set afds, curfds;
+	int afd, i, j;//file descriptor admina
+	
+	if ((afd = TEMP_FAILURE_RETRY(accept(sockfd, NULL, NULL))) == -1)
+		ERR("Cannot accept connection");
+	FD_SET(afd, &afds);
+	puts("odebrano połączenie");
+	//przyszło połączenie od admina
+	
+	struct timeval tt = {0,0};
+	for(i=0;;i++){//zmienić!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+		snprintf(buf,16,"%d\n",i);
+		puts(buf);
+		if(bulk_write(afd,buf,MSG_SIZE)<0){
+			//ERR("write");
+			puts("connection lost");
+			return 1;
+		}
+		sleep(1);
+		puts("before select");
+		curfds = afds;
+		if(select(fdmax + 2, &curfds, NULL, NULL, &tt)<0) perror("select");
+		for (j = 0; j < fdmax+2; j++){
+			if (FD_ISSET(j, &curfds)){
+				puts("before read");
+				bulk_read(afd,buf,MSG_SIZE);
+				puts(buf);
+				puts("after read");
+			}
+		}
+		puts("after select");
+		
+	}
+}
+
+void user_listen(){
+	int sockfd = create_socket(USER_PORT);
+	int fdmax = sockfd + 1;//przez to mogą nie działać równolegle trzeba to ogarnąć jedną funkcją rejestrującą
+	fd_set sfds;
+	FD_ZERO(&sfds);
+	FD_SET(sockfd, &sfds);
+	while (true){
+		puts("czekam...");
+		if (select(fdmax + 1, &sfds, NULL, NULL, NULL) == -1){
+			if (errno != EINTR) ERR("Cannot select");
+			else if(stop){
+				close_all(sfds, fdmax);
+				ERR("SIGINT");
+			}
+		}
+		if (FD_ISSET(sockfd, &sfds))
+			user_process(sockfd, fdmax);
 	}
 }

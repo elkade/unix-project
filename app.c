@@ -53,17 +53,20 @@ int main(int argc , char *argv[]){
 	int sockfd;
     //if(argc!=3) usage();
     if(sethandler(SIG_IGN,SIGPIPE)) ERR("Setting SIGPIPE:");
-    sockfd = create_socket_client("127.0.0.1",atoi("9999"));
+    sockfd = create_socket_client("127.0.0.1",atoi("5578"));
+    puts("connected");
 	bzero(message,MSG_SIZE);
-    while(1){
-		read_line(message,MSG_SIZE);
-		if( bulk_write(sockfd, message, MSG_SIZE) < 0) ERR("send");
-		int r = bulk_read(sockfd, message, MSG_SIZE);
-        if( r < 0) ERR("recv");
-        else if(r == 0) break;
-        puts(message);
-    }
+	strcpy(message,"kasia cichopek");
+	bulk_write(sockfd, message, MSG_SIZE);
+    //while(1){
+		//read_line(message,MSG_SIZE);
+		//int r = bulk_read(sockfd, message, MSG_SIZE);
+        //if( r < 0) ERR("recv");
+        //else if(r == 0) break;
+        //puts(message);
+    //}
     if(TEMP_FAILURE_RETRY(close(sockfd))<0)ERR("close:");
     exit(EXIT_SUCCESS);
 }
+
 
