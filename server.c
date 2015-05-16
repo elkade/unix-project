@@ -1,22 +1,20 @@
 #include "header.h"
 #include "client.h"
 #include "db.h"
+#include "service.h"
+#include "wrapped_message.h"
 #include <pthread.h>
 volatile sig_atomic_t stop = 0;
 
 
 void admin_listen();
 void user_listen();
+void connect_to_services();
 
 typedef enum role{
 	USER,
 	OWNER
 }role;
-typedef struct service{
-	char name[16];
-	char host[16];
-	uint16_t port;
-}service;
 
 int auth(char* input, role who){
 	char owner_name[NAME_LENGTH] = "admin";
@@ -50,6 +48,10 @@ void handle_client(char* name){
 	
 }
 
+void connect_to_services(){
+	
+}
+
 void *thread_handler( void *ptr ){
 	int *pipeout = (int*)ptr, n = 16;
 	
@@ -75,31 +77,32 @@ void *thread_handler( void *ptr ){
 		ERR("close:");
 	return NULL;
 }
-
+//main!!!!!!!!!!!!!!!!!!!!!!!!!!!!!111
 int main(int argc, char** argv){
-	int pipefd[2], i, n=16;
-	int *pipein = pipefd + 1;
-	char buf[n];
-	bzero(buf,n);
-	if(pipe(pipefd))
-		ERR("pipe:");
 	
-	pthread_t thread;
+	//int pipefd[2], i, n=16;
+	//int *pipein = pipefd + 1;
+	//char buf[n];
+	//bzero(buf,n);
+	//if(pipe(pipefd))
+		//ERR("pipe:");
+	
+	//pthread_t thread;
 
-	if(pthread_create( &thread, NULL, thread_handler, (void*) pipefd))ERR("pthread:");
+	//if(pthread_create( &thread, NULL, thread_handler, (void*) pipefd))ERR("pthread:");
 	
-	for( i = 0; ; i++ ){
-		//sleep(1);
-		sprintf(buf,"%d\n",i);
-		if(bulk_write(*pipein,buf,16)<0)ERR("write:");
-	}
+	//for( i = 0; ; i++ ){
+		////sleep(1);
+		//sprintf(buf,"%d\n",i);
+		//if(bulk_write(*pipein,buf,16)<0)ERR("write:");
+	//}
 	
-	pthread_join( thread, NULL);
+	//pthread_join( thread, NULL);
 	
-	if(TEMP_FAILURE_RETRY(close(*pipein))<0)
-		ERR("close:");
+	//if(TEMP_FAILURE_RETRY(close(*pipein))<0)
+		//ERR("close:");
 	
-	return 0;
+	//return 0;
 	if(sethandler(SIG_IGN,SIGPIPE))
 	    ERR("Setting SIGPIPE:");
 	user_listen();
@@ -419,66 +422,177 @@ void admin_listen(){
 
 
 int user_process(int sockfd, int fdmax){
-	char buf[MSG_SIZE];
-	fd_set afds, curfds;
-	int afd, i, j;//file descriptor admina
 	
-	if ((afd = TEMP_FAILURE_RETRY(accept(sockfd, NULL, NULL))) == -1)
-		ERR("Cannot accept connection");
-	FD_SET(afd, &afds);
-	puts("odebrano połączenie");
-	//przyszło połączenie od admina
+return 0;
+	//char buf[MSG_SIZE];
+	//fd_set afds, curfds;
+	//int afd, i, j;//file descriptor admina
 	
-	struct timeval tt = {0,0};
-	for(i=0;;i++){//zmienić!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-		snprintf(buf,16,"%d\n",i);
-		puts(buf);
-		//if(bulk_write(afd,buf,MSG_SIZE)<0){
-			//ERR("write");
-		//	puts("connection lost");
-		//	return 1;
+	//if ((afd = TEMP_FAILURE_RETRY(accept(sockfd, NULL, NULL))) == -1)
+		//ERR("Cannot accept connection");
+	//FD_SET(afd, &afds);
+	//puts("odebrano połączenie");
+	////przyszło połączenie od admina
+	
+	//struct timeval tt = {0,0};
+	//for(i=0;;i++){//zmienić!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+		//snprintf(buf,16,"%d\n",i);
+		//puts(buf);
+		////if(bulk_write(afd,buf,MSG_SIZE)<0){
+			////ERR("write");
+		////	puts("connection lost");
+		////	return 1;
+		////}
+		//sleep(1);
+		//puts("before select");
+		//curfds = afds;
+		//if(select(fdmax + 2, &curfds, NULL, NULL, &tt)<0) perror("select");
+		//for (j = 0; j < fdmax+2; j++){
+			//if (FD_ISSET(j, &curfds)){
+				//bulk_read(afd,buf,MSG_SIZE);
+				//puts(buf);
+				//if(bulk_write(afd,buf,MSG_SIZE)<0){
+					////ERR("write");
+					//puts("connection lost");
+					//return 1;
+				//}
+			//}
 		//}
-		sleep(1);
-		puts("before select");
-		curfds = afds;
-		if(select(fdmax + 2, &curfds, NULL, NULL, &tt)<0) perror("select");
-		for (j = 0; j < fdmax+2; j++){
-			if (FD_ISSET(j, &curfds)){
-				bulk_read(afd,buf,MSG_SIZE);
-				puts(buf);
-				if(bulk_write(afd,buf,MSG_SIZE)<0){
-					//ERR("write");
-					puts("connection lost");
-					return 1;
-				}
-			}
-		}
-		puts("after select");
-		//najpierw oczekuję wszystkich tak tak w kliencie
-		//odbieram wszystko z portu klienckiego / naliczam opłaty / przekazuje na bieżąco na serwisy w zależności od service_name
-		//odbieram wszystko od serwisów / naliczam opłaty / przekazuję na port kliencki w zależności od client_name
-		//
-		//naliczanie i przekazywanie dalej możnaby na osobnym wątku
-		//odbieram -> wsadzam na kolejkę
-	}
+		//puts("after select");
+		////najpierw oczekuję wszystkich tak tak w kliencie
+		////odbieram wszystko z portu klienckiego / naliczam opłaty / przekazuje na bieżąco na serwisy w zależności od service_name
+		////odbieram wszystko od serwisów / naliczam opłaty / przekazuję na port kliencki w zależności od client_name
+		////
+		////naliczanie i przekazywanie dalej możnaby na osobnym wątku
+		////odbieram -> wsadzam na kolejkę
+	//}
 }
 
+typedef struct service_fd{
+	int fd;
+	service s;
+}service_fd;
+
+typedef struct connection{
+	int fd;
+	client c;
+	service_fd slist[100];
+	int n;
+}connection;
+
 void user_listen(){
-	int sockfd = create_socket(USER_PORT);
-	int fdmax = sockfd + 1;//przez to mogą nie działać równolegle trzeba to ogarnąć jedną funkcją rejestrującą
-	fd_set sfds;
-	FD_ZERO(&sfds);
-	FD_SET(sockfd, &sfds);
-	while (true){
-		puts("czekam...");
-		if (select(fdmax + 1, &sfds, NULL, NULL, NULL) == -1){
-			if (errno != EINTR) ERR("Cannot select");
-			else if(stop){
-				close_all(sfds, fdmax);
-				ERR("SIGINT");
-			}
+	char message[MSG_SIZE];
+	int clifd = create_socket(USER_PORT), fdmax, i, j;
+	fd_set curfds, allfds, clifds, servfds;
+	fdmax = clifd;
+	
+	FD_ZERO(&allfds);
+	FD_ZERO(&clifds);
+	FD_ZERO(&servfds);
+	
+	FD_SET(clifd,&allfds);
+	FD_SET(clifd,&clifds);
+
+	int n=0;
+	connection clist[100];
+	for (i = 0; i < 100; i++)
+		clist[i].n=0;
+	
+	int select_all_number;
+	
+	//struct timeval tt = {0,0};
+	while(true){
+start:
+		curfds = allfds;
+		if ((select_all_number = select(fdmax + 1, &curfds, NULL, NULL, NULL))<0) perror("select");//jest coś ale nie wiadomo co
+		printf("dostałem %d rzeczy\n",select_all_number);
+		curfds = clifds;
+		if (select(fdmax + 1, &curfds, NULL, NULL, NULL)<0) perror("select");//sprawdzam sockety klienckie
+		if(FD_ISSET(clifd,&curfds)){
+			select_all_number--;
+			printf("%s\n","nowy klient");
+
+			//trzeba sprawdzić, czy jest w bazie
+			clist[n].fd = addnewfd(clifd,&allfds,&fdmax);
+			
+			//mamy nowe połączenie od klienta
+			//trzeba jakoś zarejestrować
+			//można odjąć od liczby wszystkich nowych wiadomości
+			n++;
 		}
-		if (FD_ISSET(sockfd, &sfds))
-			user_process(sockfd, fdmax);
+		if(select_all_number<=0) goto start;
+		for (i = 0; i < n; i++){//dla każdego zarejestrowanego klienta
+			if(FD_ISSET(clist[i].fd,&curfds)){
+				//trzeba sprawdzić, czy klient jest w bazie
+				printf("%s\n",message);
+
+				select_all_number--;
+				if( bulk_read(clist[i].fd, message, MSG_SIZE) < 0)
+					ERR("read");
+				wrapped_message msg_from_client;
+				str_to_wrapped_message(message,&msg_from_client,MSG_SIZE);
+				//trzeba znaleźć deskryptor dla serwisu
+				
+				if(clist[i].n==0){//trzeba się zarejestrować
+					client c;
+					if(db_select_client(msg_from_client.client_name,&c)<0){}//nie ma w bazie
+					else{
+						clist[i].c = c;
+						service s;
+						if(db_select_service(msg_from_client.service_name,&s)<0){}//nie znaleziono - trzeba zamknąć fd
+						else{
+							clist[i].slist[n].s = s;
+							clist[i].slist[n].fd = create_socket_client(s.host_name,atoi(s.port_number));
+							addnewfd_listen(clist[i].slist[n].fd,&allfds,&fdmax);
+							clist[i].n++;
+						}
+					}
+				}
+				else{
+					bool is_found = false;
+					for (j = 0; j < clist[i].n; j++)//POPRAWIC
+						if(strcmp(clist[i].slist[j].s.name, msg_from_client.service_name)==0){
+							is_found = true;
+							if( bulk_write(clist[i].slist[j].fd, msg_from_client.content, MSG_CONTENT_SIZE) < 0)
+								ERR("write");
+						}
+					if(!is_found){
+						printf("%s\n",message);
+						service s;
+						//trzeba sprawdzić, czy taki serwis jest w ogóle w bazie
+						if(db_select_service(msg_from_client.service_name,&s)<0){}//nie znaleziono - trzeba zamknąć fd
+						else{
+							clist[i].slist[n].s = s;
+							clist[i].slist[n].fd = create_socket_client(s.host_name,atoi(s.port_number));
+							addnewfd_listen(clist[i].slist[n].fd,&allfds,&fdmax);
+							clist[i].n++;
+						}
+					}
+				}
+			}
+			for (j = 0; j < clist[i].n; j++){//dla każdego serwisu
+				if(FD_ISSET(clist[i].slist[j].fd,&curfds)){//mamy coś od serwisu
+					select_all_number--;
+					if( bulk_read(clist[i].slist[j].fd, message, MSG_SIZE) < 0)
+						ERR("read");
+					wrapped_message msg_from_service;
+					bzero(msg_from_service.content,MSG_CONTENT_SIZE);
+					strcpy(msg_from_service.content,message);
+					
+					bzero(msg_from_service.service_name,SERVICE_NAME_LENGTH);
+					strcpy(msg_from_service.service_name,clist[i].slist[j].s.name);
+					
+					bzero(msg_from_service.client_name,NAME_LENGTH);
+					strcpy(msg_from_service.client_name,clist[i].c.name);
+					bzero(message,MSG_SIZE);
+					wrapped_message_to_str(message,msg_from_service,MSG_SIZE);
+					if( bulk_write(clist[i].fd, message, MSG_SIZE) < 0)
+						ERR("write");
+				}
+				if(select_all_number<=0) goto start;
+			}
+			if(select_all_number<=0) goto start;
+		}
 	}
+
 }

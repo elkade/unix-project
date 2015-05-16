@@ -1,24 +1,7 @@
 #define _GNU_SOURCE 
-#include <unistd.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <sys/wait.h>
-#include <sys/socket.h>
-#include <netinet/in.h>
-#include <errno.h>
-#include <string.h>
-#include <time.h>
-#include <netdb.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <unistd.h>
-#include <errno.h>
-#include <string.h>
-#include <sys/types.h>
-#include <sys/socket.h>
-#include <sys/un.h>
-#include <signal.h>
+
 #include "header.h"
+#include "wrapped_message.h"
 
 #define ERR(source) (fprintf(stderr,"%s:%d\n",__FILE__,__LINE__),\
                      perror(source),kill(0,SIGKILL),\
@@ -33,29 +16,6 @@ void usage(){
 	exit(EXIT_FAILURE);
 }
 
-int create_socket_client(char *hostname, int port){
-	struct sockaddr_in serv_addr;
-    struct hostent *server;
-	int status, s = socket(AF_INET , SOCK_STREAM , 0);
-	socklen_t size = sizeof(int);
-	fd_set fds;
-    if (s == -1) ERR("socket");
-    if ((server = gethostbyname(hostname)) == NULL) ERR("gethostbyname");
-    memset(&serv_addr, 0, sizeof(struct sockaddr_in));
-    serv_addr.sin_addr = *(struct in_addr *) server->h_addr;
-    serv_addr.sin_family = AF_INET;
-    serv_addr.sin_port = htons(port);
-    if (connect(s, (struct sockaddr *) &serv_addr, sizeof(serv_addr)) == -1){
-		if (errno != EINTR)	ERR("connect");
-		FD_ZERO(&fds);
-		FD_SET(s, &fds);
-		if (TEMP_FAILURE_RETRY(select(s + 1, NULL, &fds, NULL, NULL)) == -1) ERR("select");
-		if (getsockopt(s, SOL_SOCKET, SO_ERROR, &status, &size) == -1) ERR("getsockopt");
-		if (status != 0) ERR("connect");
-	}
-    return s;
-}
-
 void int_to_str(char* str, int n, int i){//zwraca z terminatorem więc dla 4 trzeba podać 5
 	char buf[n];
 	bzero(buf,n);
@@ -68,76 +28,6 @@ void int_to_str(char* str, int n, int i){//zwraca z terminatorem więc dla 4 trz
 	//endpoint.port_number
 //}
 
-int addnewfd_listen(int s, fd_set *fds, int *fdmax){
-	int fd = s;
-	FD_SET(fd, fds);
-	*fdmax = (*fdmax < fd) ? fd : *fdmax;
-	return fd;
-}
-
-int addnewfd(int s, fd_set *fds, int *fdmax){
-	int fd;
-	if ((fd = TEMP_FAILURE_RETRY(accept(s, NULL, NULL))) == -1)	ERR("Cannot accept connection");
-	FD_SET(fd, fds);
-	*fdmax = (*fdmax < fd) ? fd : *fdmax;
-	return fd;
-}
-
-void str_to_wrapped_message(char* message, wrapped_message *msg, int n){
-	
-	int offset=0;
-	char buf[MSG_SIZE];
-	//printf("%d\n",offset);
-	bzero(buf,MSG_SIZE);
-	
-	
-	strncpy(buf,message + offset,INT_LENGTH);
-	offset += INT_LENGTH;
-	//printf("%d\n",atoi(buf));
-	strncpy(msg->service_name,message+offset,atoi(buf));
-	offset+=atoi(buf);
-	//printf("%d\n",offset);
-	
-	bzero(buf,MSG_SIZE);
-	strncpy(buf,message + offset,INT_LENGTH);
-	offset += INT_LENGTH;
-	//printf("%d\n",atoi(buf));
-	strncpy(msg->client_name,message+offset,atoi(buf));
-	offset+=atoi(buf);
-	//printf("%d\n",offset);
-	
-	bzero(buf,MSG_SIZE);
-	strncpy(buf,message + offset,INT_LENGTH);
-	offset += INT_LENGTH;
-	//printf("%d\n",atoi(buf));
-	strncpy(msg->content,message+offset,atoi(buf));
-}
-
-void wrapped_message_to_str(char* buf, wrapped_message msg, int n){
-	char buf2[MSG_SIZE];
-	bzero(buf2,MSG_SIZE);
-
-	snprintf(buf2, INT_LENGTH+1, "%.*ld", INT_LENGTH , strlen(msg.service_name));
-	strncat(buf,buf2,strlen(buf2));
-	bzero(buf2,MSG_SIZE);
-	snprintf(buf2, SERVICE_NAME_LENGTH+1, "%s", msg.service_name);
-	strncat(buf,buf2,strlen(buf2));
-	bzero(buf2,MSG_SIZE);
-	
-	snprintf(buf2, INT_LENGTH+1, "%.*ld", INT_LENGTH , strlen(msg.client_name));
-	strncat(buf,buf2,strlen(buf2));
-	bzero(buf2,MSG_SIZE);
-	snprintf(buf2, NAME_LENGTH+1, "%s", msg.client_name);
-	strncat(buf,buf2,strlen(buf2));
-	bzero(buf2,MSG_SIZE);
-	
-	snprintf(buf2, INT_LENGTH+1, "%.*ld", INT_LENGTH , strlen(msg.content));
-	strncat(buf,buf2,strlen(buf2));
-	bzero(buf2,MSG_SIZE);
-	snprintf(buf2, MSG_CONTENT_SIZE+1, "%s", msg.content);
-	strncat(buf,buf2,strlen(buf2));
-	bzero(buf2,MSG_SIZE);
-	}
 
 int main(int argc , char *argv[]){
 	char name[NAME_LENGTH];

@@ -26,28 +26,6 @@ void usage(){
 	exit(EXIT_FAILURE);
 }
 
-int create_socket_client(char *hostname, int port){
-	struct sockaddr_in serv_addr;
-    struct hostent *server;
-	int status, s = socket(AF_INET , SOCK_STREAM , 0);
-	socklen_t size = sizeof(int);
-	fd_set fds;
-    if (s == -1) ERR("socket");
-    if ((server = gethostbyname(hostname)) == NULL) ERR("gethostbyname");
-    memset(&serv_addr, 0, sizeof(struct sockaddr_in));
-    serv_addr.sin_addr = *(struct in_addr *) server->h_addr;
-    serv_addr.sin_family = AF_INET;
-    serv_addr.sin_port = htons(port);
-    if (connect(s, (struct sockaddr *) &serv_addr, sizeof(serv_addr)) == -1){
-		if (errno != EINTR)	ERR("connect");
-		FD_ZERO(&fds);
-		FD_SET(s, &fds);
-		if (TEMP_FAILURE_RETRY(select(s + 1, NULL, &fds, NULL, NULL)) == -1) ERR("select");
-		if (getsockopt(s, SOL_SOCKET, SO_ERROR, &status, &size) == -1) ERR("getsockopt");
-		if (status != 0) ERR("connect");
-	}
-    return s;
-}
 int main(int argc , char *argv[]){
 	char message[MSG_SIZE];
 	int sockfd;
@@ -60,13 +38,13 @@ int main(int argc , char *argv[]){
 	strcpy(message,"kasia cichopek");
 	bulk_write(sockfd, message, MSG_SIZE);
 		bzero(message,MSG_SIZE);
-    //while(1){
+    while(1){
 		//read_line(message,MSG_SIZE);
 		int r = bulk_read(sockfd, message, MSG_SIZE);
         if( r < 0) ERR("recv");
         //else if(r == 0) break;
         puts(message);
-    //}
+    }
     if(TEMP_FAILURE_RETRY(close(sockfd))<0)ERR("close:");
     exit(EXIT_SUCCESS);
 }

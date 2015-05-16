@@ -15,6 +15,17 @@
 #include <time.h>
 #include <stdbool.h>
 #include <assert.h>
+#include <unistd.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <sys/wait.h>
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <errno.h>
+#include <string.h>
+#include <time.h>
+#include <netdb.h>
+
 #define ERR(source) (fprintf(stderr,"%s:%d\n",__FILE__,__LINE__),\
                      perror(source),kill(0,SIGKILL),\
 		     		     exit(EXIT_FAILURE))
@@ -35,14 +46,12 @@
 
 #define PORT_NUMBER_LENGTH 8
 #define SERVICE_NAME_LENGTH 16
+#define HOST_NAME_LENGTH 16
+#define SERVICE_DISPLAY_SIZE 128
 
 #define MAX_SOCKETS_TO_ONE_PORT 16
 
-typedef struct wrapped_message{
-	char service_name[SERVICE_NAME_LENGTH];
-	char client_name[NAME_LENGTH];
-	char content[MSG_SIZE];
-}wrapped_message;
+
 
 typedef struct local_endpoint{
 	char port_number[PORT_NUMBER_LENGTH];
@@ -52,6 +61,13 @@ typedef struct local_endpoint{
 }local_endpoint;
 
 static struct termios old, new;
+
+int addnewfd_listen(int s, fd_set *fds, int *fdmax){
+	int fd = s;
+	FD_SET(fd, fds);
+	*fdmax = (*fdmax < fd) ? fd : *fdmax;
+	return fd;
+}
 
 /* Initialize new terminal i/o settings */
 void initTermios(int echo) 
@@ -200,3 +216,34 @@ int create_socket(int port){
 	if(listen(sockfd, BACKLOG) < 0) ERR("listen");
 	return sockfd;
 } 
+int create_socket_client(char *hostname, int port){
+	struct sockaddr_in serv_addr;
+    struct hostent *server;
+	int status, s = socket(AF_INET , SOCK_STREAM , 0);
+	socklen_t size = sizeof(int);
+	fd_set fds;
+    if (s == -1) ERR("socket");
+    if ((server = gethostbyname(hostname)) == NULL) ERR("gethostbyname");
+    memset(&serv_addr, 0, sizeof(struct sockaddr_in));
+    serv_addr.sin_addr = *(struct in_addr *) server->h_addr;
+    serv_addr.sin_family = AF_INET;
+    serv_addr.sin_port = htons(port);
+    if (connect(s, (struct sockaddr *) &serv_addr, sizeof(serv_addr)) == -1){
+		if (errno != EINTR)	ERR("connect");
+		FD_ZERO(&fds);
+		FD_SET(s, &fds);
+		if (TEMP_FAILURE_RETRY(select(s + 1, NULL, &fds, NULL, NULL)) == -1) ERR("select");
+		if (getsockopt(s, SOL_SOCKET, SO_ERROR, &status, &size) == -1) ERR("getsockopt");
+		if (status != 0) ERR("connect");
+	}
+    return s;
+}
+
+
+int addnewfd(int s, fd_set *fds, int *fdmax){
+	int fd;
+	if ((fd = TEMP_FAILURE_RETRY(accept(s, NULL, NULL))) == -1)	ERR("Cannot accept connection");
+	FD_SET(fd, fds);
+	*fdmax = (*fdmax < fd) ? fd : *fdmax;
+	return fd;
+}
