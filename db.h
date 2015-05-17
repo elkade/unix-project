@@ -91,13 +91,13 @@ int db_insert_client(client* c){
 }
 int db_select_client(char* name, client* c){
 	FILE *f;
-	printf("name: %s\t%ld\n", name, strlen(name));
+	printf("szukam klienta: %s\t%ld\n", name, strlen(name));
 	f = fopen(CLIENTS_DB_NAME, "r");
 	if (f == NULL){
 		perror("Nie udalo sie otworzyc pliku notatki.txt");
 		return 1;
 	}
-	puts("Plik otwarty pomyslnie!");
+	//puts("Plik otwarty pomyslnie!");
 
 	char buf[MAX_DB_LINE_LENGTH];
 	while (fgets (buf, sizeof(buf), f)) {
@@ -105,9 +105,10 @@ int db_select_client(char* name, client* c){
 		db_row_to_client(buf, c);
 		//printf("name:%s\t%ld\n", c->name, strlen(c->name));
 		if(strcmp(name,c->name)==0){
-			printf("znaleziono");
+			puts("znaleziono");
 			if (c == NULL){
 				fclose(f);
+				puts("nie znaleziono");
 				return 1;
 			}
 			fclose(f);

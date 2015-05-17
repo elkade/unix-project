@@ -91,7 +91,7 @@ start:
 			if(strcmp(msg_from_server.client_name,name)==0)
 				printf("dobry klient\n");
 			else
-				printf("zły klient\n");
+				printf("zły klient %s\t%s\n",msg_from_server.client_name,name);
 						
 			//a teraz trzeba ją wysłać tam gdzie trzeba
 			

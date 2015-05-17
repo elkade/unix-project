@@ -93,13 +93,13 @@ int db_insert_service(service* s){
 }
 int db_select_service(char* name, service* s){
 	FILE *f;
-	printf("name: %s\t%ld\n", name, strlen(name));
+	printf("szukam serwisu:  %s\t%ld\n", name, strlen(name));
 	f = fopen(SERVICES_DB_NAME, "r");
 	if (f == NULL){
 		perror("Nie udalo sie otworzyc pliku notatki.txt");
 		return 1;
 	}
-	puts("Plik otwarty pomyslnie!");
+	//puts("Plik otwarty pomyslnie!");
 
 	char buf[MAX_DB_LINE_LENGTH];
 	while (fgets (buf, sizeof(buf), f)) {
@@ -107,9 +107,10 @@ int db_select_service(char* name, service* s){
 		db_row_to_service(buf, s);
 		//printf("name:%s\t%ld\n", c->name, strlen(c->name));
 		if(strcmp(name,s->name)==0){
-			printf("znaleziono");
+			puts("znaleziono");
 			if (s == NULL){
 				fclose(f);
+				puts("nie znaleziono");
 				return 1;
 			}
 			fclose(f);

@@ -165,11 +165,17 @@ char** str_split(char* a_str, const char a_delim)//to nie jest zbyt dobra funkcj
 
         while (token)
         {
-            assert(idx < count);
+            if(!(idx < count)){
+				free(result);
+				return NULL;
+			}
             *(result + idx++) = strdup(token);
             token = strtok(0, delim);
         }
-        assert(idx == count - 1);
+        if(!(idx == count - 1)){
+				free(result);
+				return NULL;
+			}
         *(result + idx) = 0;
     }
 
@@ -310,7 +316,11 @@ int admin_handle_message(char* msg, char* response, bool is_authenticated){
 		puts("authenticated");
 	
 	args = str_split(msg, ' ');//to nie jest dobrze bo nie sprawdzam, czy nie przyszedł syf
-	
+	if(args==NULL){
+		puts("unhandled message");
+		strcpy(response,"unhandled message");
+		return 1;
+	}
 	cmd = args[0];
 	
 	if(!is_authenticated){
@@ -483,15 +493,15 @@ typedef struct connection{
 void user_listen(){
 	char message[MSG_SIZE];
 	int clifd = create_socket(USER_PORT), fdmax, i, j;
-	fd_set curfds, allfds, clifds, servfds;
+	int admin_listen_socket = create_socket(ADMIN_PORT), admfd = -1;
+	fd_set curfds, allfds;
+	bool is_authenticated = false;
 	fdmax = clifd;
 	
 	FD_ZERO(&allfds);
-	FD_ZERO(&clifds);
-	FD_ZERO(&servfds);
 	
 	FD_SET(clifd,&allfds);
-	FD_SET(clifd,&clifds);
+	FD_SET(admin_listen_socket,&allfds);
 
 	int n=0;
 	connection clist[100];
@@ -506,15 +516,70 @@ start:
 		curfds = allfds;
 		if ((select_all_number = select(fdmax + 1, &curfds, NULL, NULL, NULL))<0) perror("select");//jest coś ale nie wiadomo co
 		printf("dostałem %d rzeczy\n",select_all_number);
-		curfds = clifds;
-		if (select(fdmax + 1, &curfds, NULL, NULL, NULL)<0) perror("select");//sprawdzam sockety klienckie
+		puts("fd:");
+		for (i = 0; i < fdmax+1; i++)
+		{
+			if(FD_ISSET(i,&curfds)){
+				printf("%d\n",i);
+			}
+		}
+		sleep(1);
+		//getchar();
+		//curfds = clifds;
+		//if (select(fdmax + 1, &curfds, NULL, NULL, NULL)<0) perror("select");//sprawdzam sockety klienckie
+		
+		if(FD_ISSET(admin_listen_socket,&curfds)){
+			select_all_number--;
+			printf("%s\n","admin chce się połączyć");
+			
+			admfd = addnewfd(admin_listen_socket,&allfds,&fdmax);
+			printf("przydzialem adminowi: %d\n",admfd);			
+		}
+		if(select_all_number<=0) goto start;
+		
+		
+		if(FD_ISSET(admfd, &curfds)){
+			select_all_number--;
+			bzero(message,MSG_SIZE);
+			if(bulk_read(admfd,message,MSG_SIZE)<0){
+				//ERR("read");
+			puts("connection lost");
+			FD_CLR(admfd,&allfds);
+			if(TEMP_FAILURE_RETRY(close(admfd))<0)ERR("close:");
+			admfd = -1;
+			is_authenticated = false;
+			}
+			puts("otrzymano");
+			puts(message);
+			trim(message,strlen(message));
+			puts(message);
+			char response[MSG_SIZE];
+			if(!is_authenticated){
+				if((is_authenticated = (auth(message,OWNER)==0)))
+					strcpy(response,"authentication successful");
+				else
+					strcpy(response,"authentication failed");//coś jest nie tak, bo mimo, że idzie admin, to pisze failed
+			}
+			else
+				admin_handle_message(message, response, is_authenticated);
+			puts(response);
+			if(bulk_write(admfd,response,MSG_SIZE)<0){
+				//ERR("write");
+				puts("connection lost");
+				FD_CLR(admfd,&allfds);
+				if(TEMP_FAILURE_RETRY(close(admfd))<0)ERR("close:");
+				admfd = -1;
+				is_authenticated = false;
+			}
+		}
+		if(select_all_number<=0) goto start;
 		if(FD_ISSET(clifd,&curfds)){
 			select_all_number--;
 			printf("%s\n","nowy klient");
 
 			//trzeba sprawdzić, czy jest w bazie
 			clist[n].fd = addnewfd(clifd,&allfds,&fdmax);
-			
+			printf("przydzialem: %d\n",clist[n].fd);
 			//mamy nowe połączenie od klienta
 			//trzeba jakoś zarejestrować
 			//można odjąć od liczby wszystkich nowych wiadomości
@@ -522,59 +587,66 @@ start:
 		}
 		if(select_all_number<=0) goto start;
 		for (i = 0; i < n; i++){//dla każdego zarejestrowanego klienta
+			printf("sprawdzam klienta %d o fd %d\n",i,clist[i].fd);
 			if(FD_ISSET(clist[i].fd,&curfds)){
+				puts("znalazłem fd\n");
 				//trzeba sprawdzić, czy klient jest w bazie
-				printf("%s\n",message);
-
 				select_all_number--;
 				if( bulk_read(clist[i].fd, message, MSG_SIZE) < 0)
 					ERR("read");
+				puts("otrzymuję");
+				printf("%s\n",message);
+
 				wrapped_message msg_from_client;
 				str_to_wrapped_message(message,&msg_from_client,MSG_SIZE);
-				//trzeba znaleźć deskryptor dla serwisu
 				
-				if(clist[i].n==0){//trzeba się zarejestrować
-					client c;
-					if(db_select_client(msg_from_client.client_name,&c)<0){}//nie ma w bazie
-					else{
-						clist[i].c = c;
-						service s;
-						if(db_select_service(msg_from_client.service_name,&s)<0){}//nie znaleziono - trzeba zamknąć fd
-						else{
-							clist[i].slist[n].s = s;
-							clist[i].slist[n].fd = create_socket_client(s.host_name,atoi(s.port_number));
-							addnewfd_listen(clist[i].slist[n].fd,&allfds,&fdmax);
-							clist[i].n++;
-						}
-					}
-				}
+				puts("rejestracja");
+				client c;
+				if(db_select_client(msg_from_client.client_name,&c)!=0){puts("nie ma klienta w bazie");}//nie ma w bazie
 				else{
+					puts("klient jest w bazie. n=0 więc rejestruję serwis");
+					clist[i].c = c;
 					bool is_found = false;
 					for (j = 0; j < clist[i].n; j++)//POPRAWIC
 						if(strcmp(clist[i].slist[j].s.name, msg_from_client.service_name)==0){
 							is_found = true;
 							if( bulk_write(clist[i].slist[j].fd, msg_from_client.content, MSG_CONTENT_SIZE) < 0)
 								ERR("write");
+							puts("wysyłam");
+							printf("%s\n",msg_from_client.content);
 						}
 					if(!is_found){
 						printf("%s\n",message);
 						service s;
 						//trzeba sprawdzić, czy taki serwis jest w ogóle w bazie
-						if(db_select_service(msg_from_client.service_name,&s)<0){}//nie znaleziono - trzeba zamknąć fd
+						if(db_select_service(msg_from_client.service_name,&s)!=0){puts("nie ma serwisu w bazie");}//nie znaleziono - trzeba zamknąć fd
 						else{
-							clist[i].slist[n].s = s;
-							clist[i].slist[n].fd = create_socket_client(s.host_name,atoi(s.port_number));
-							addnewfd_listen(clist[i].slist[n].fd,&allfds,&fdmax);
+							int m = clist[i].n;
+							puts("rejestruje serwis");
+							clist[i].slist[m].s = s;
+							clist[i].slist[m].fd = create_socket_client(s.host_name,atoi(s.port_number));
+							printf("dla %d %d przydzielam fd %d\n",i,clist[i].n,clist[i].slist[m].fd );
+							addnewfd_listen(clist[i].slist[m].fd,&allfds,&fdmax);
+							if( bulk_write(clist[i].slist[m].fd, msg_from_client.content, MSG_CONTENT_SIZE) < 0)
+								ERR("write");
+							
+							
 							clist[i].n++;
+							printf("%d %d ma fd %d\n",0,0,clist[0].slist[0].fd );
 						}
 					}
-				}
+				}//}
 			}
+			printf("%d %d ma fd %d\n",0,0,clist[0].slist[0].fd );
+			if(select_all_number<=0) goto start;
 			for (j = 0; j < clist[i].n; j++){//dla każdego serwisu
+				printf("sprawdzam serwis %d\to fd %d\n",j,clist[i].slist[j].fd);
 				if(FD_ISSET(clist[i].slist[j].fd,&curfds)){//mamy coś od serwisu
 					select_all_number--;
 					if( bulk_read(clist[i].slist[j].fd, message, MSG_SIZE) < 0)
 						ERR("read");
+					puts("otrzymuję");
+					printf("%s\n",message);
 					wrapped_message msg_from_service;
 					bzero(msg_from_service.content,MSG_CONTENT_SIZE);
 					strcpy(msg_from_service.content,message);
@@ -586,6 +658,8 @@ start:
 					strcpy(msg_from_service.client_name,clist[i].c.name);
 					bzero(message,MSG_SIZE);
 					wrapped_message_to_str(message,msg_from_service,MSG_SIZE);
+					puts("wysyłam");
+					printf("%s\n",message);
 					if( bulk_write(clist[i].fd, message, MSG_SIZE) < 0)
 						ERR("write");
 				}

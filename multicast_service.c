@@ -109,12 +109,15 @@ void add(char** parties, int* votes, char* buffer){
 sem_t mutex;
 
 void *thread_handler( void *ptr ){
+	char buf[128];
 	int i;
 	sockinfo *si = (sockinfo*)ptr;
 	for (i = 0; ; i++){
 		sleep(1);
 		sem_wait(&mutex);
-		multicast(*si->fds, *si->fdmax, "gówno");
+		bzero(buf,128);
+		snprintf(buf,128,"%d: %s",i,"gówno");
+		multicast(*si->fds, *si->fdmax, buf);
 		sem_post(&mutex); 
 	}
 
