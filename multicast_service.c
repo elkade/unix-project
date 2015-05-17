@@ -21,6 +21,7 @@
 #define BACKLOG 5
 
 volatile sig_atomic_t stop = 0;
+char bufff[128];
 
 typedef struct sockinfo{
 	int *fdmax;
@@ -116,8 +117,9 @@ void *thread_handler( void *ptr ){
 		sleep(1);
 		sem_wait(&mutex);
 		bzero(buf,128);
-		snprintf(buf,128,"%d: %s",i,"gówno");
+		snprintf(buf,128,"%d: %s",i,bufff);
 		multicast(*si->fds, *si->fdmax, buf);
+		puts(buf);
 		sem_post(&mutex); 
 	}
 
@@ -126,7 +128,7 @@ void *thread_handler( void *ptr ){
 
 
 void get_results(char** parties, int* votes, int s, int m, fd_set *fds, int *fdmax){
-	//char buf[MSG_SIZE];
+	char buf[128];
 	int i, clientcount = 0;
 	fd_set mfds, curfds;
 	FD_ZERO(&mfds);
@@ -165,6 +167,7 @@ void get_results(char** parties, int* votes, int s, int m, fd_set *fds, int *fdm
 					clientcount++;
 					sem_wait(&mutex); 
 					int fd = addnewclient(s, &mfds, fdmax);
+					FD_SET(fd, &mfds);
 					FD_SET(fd, fds);
 					sem_post(&mutex); 
 					printf("połączono z %d\n",fd);
@@ -172,6 +175,21 @@ void get_results(char** parties, int* votes, int s, int m, fd_set *fds, int *fdm
 					
 				}
 				else{
+					sem_wait(&mutex);
+					bzero(buf,128);
+					int q;
+					if((q=bulk_read(i,buf,128))<0){
+						FD_CLR(i,&mfds);
+						FD_CLR(i, fds);
+						if(TEMP_FAILURE_RETRY(close(i))<0)
+							ERR("close:");
+					}else if(q>0){
+						printf("otrzymalem od %d:",i);
+						bzero(bufff,128);
+						strncpy(bufff,buf,128);
+						puts(bufff);
+					}
+					sem_post(&mutex); 
 				}
 			}
 	}
@@ -191,6 +209,8 @@ int create_socket(int port){
 	return sockfd;
 }
 int main(int argc, char** argv){
+	bzero(bufff,128);
+	strcpy(bufff,"bronkobus");
 	char *parties[] = {"ABC", "CDE", "EFG", "GHI", "IJK"};
 	int votes[] = {0, 0, 0, 0, 0}, sockfd, fdmax;
 	fd_set fds;

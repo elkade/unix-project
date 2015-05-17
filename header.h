@@ -3,7 +3,7 @@
 #include <termios.h>
 #include <stdio.h>
 #include <string.h>
-
+#include <fcntl.h>
 #include <unistd.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -25,6 +25,8 @@
 #include <string.h>
 #include <time.h>
 #include <netdb.h>
+#include <stropts.h>
+
 
 #define ERR(source) (fprintf(stderr,"%s:%d\n",__FILE__,__LINE__),\
                      perror(source),kill(0,SIGKILL),\
@@ -246,4 +248,64 @@ int addnewfd(int s, fd_set *fds, int *fdmax){
 	FD_SET(fd, fds);
 	*fdmax = (*fdmax < fd) ? fd : *fdmax;
 	return fd;
+}
+char** str_split(char* a_str, const char a_delim)//to nie jest zbyt dobra funkcja
+{
+    char** result    = 0;
+    size_t count     = 0;
+    char* tmp        = a_str;
+    char* last_comma = 0;
+    char delim[2];
+    delim[0] = a_delim;
+    delim[1] = 0;
+
+    /* Count how many elements will be extracted. */
+    while (*tmp)
+    {
+        if (a_delim == *tmp)
+        {
+            count++;
+            last_comma = tmp;
+        }
+        tmp++;
+    }
+
+    /* Add space for trailing token. */
+    count += last_comma < (a_str + strlen(a_str) - 1);
+
+    /* Add space for terminating null string so caller
+       knows where the list of returned strings ends. */
+    count++;
+
+    result = malloc(sizeof(char*) * count);
+
+    if (result)
+    {
+        size_t idx  = 0;
+        char* token = strtok(a_str, delim);
+
+        while (token)
+        {
+            if(!(idx < count)){
+				free(result);
+				return NULL;
+			}
+            *(result + idx++) = strdup(token);
+            token = strtok(0, delim);
+        }
+        if(!(idx == count - 1)){
+				free(result);
+				return NULL;
+			}
+        *(result + idx) = 0;
+    }
+
+    return result;
+}
+void disconnect(int fd, fd_set *fds){
+	fprintf(stderr,"disconnecting %d\n",fd);
+	FD_CLR(fd,fds);
+	if(TEMP_FAILURE_RETRY(close(fd))<0)
+		ERR("close:");
+	fprintf(stderr,"%d disconnected\n",fd);
 }

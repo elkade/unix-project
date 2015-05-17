@@ -1,16 +1,159 @@
-//#include <unistd.h>
-//#include <stdio.h>
-//#include <stdlib.h>
-//#include <sys/wait.h>
-//#include <sys/time.h>
-//#include <sys/socket.h>
-//#include <netinet/in.h>
-//#include <errno.h>
-//#include <string.h>
-//#include <netdb.h>
-//#include <time.h>
-//#include <stdbool.h>
-//#include <float.h>
+#include "header.h"
+
+#define SET_MAX 64
+
+typedef struct service_set_elem{
+	int fd;
+	char name[SERVICE_NAME_LENGTH];
+	bool is_empty;
+}service_set_elem;
+
+typedef struct service_set{
+	service_set_elem arr[SET_MAX];
+	int n;//size
+}service_set;
+
+
+
+typedef struct client_set_elem{
+	int fd;
+	char name[NAME_LENGTH];
+	bool is_empty;
+	service_set sset;
+}client_set_elem;
+
+typedef struct client_set{
+	client_set_elem arr[SET_MAX];
+	int n;//size
+}client_set;
+
+
+
+
+
+
+
+void service_set_init(service_set *ss, int n){
+	int i;
+	if(n>=SET_MAX)
+		ERR("set:");
+	ss->n = n;
+	for (i = 0; i < ss->n; i++){
+		ss->arr[i].is_empty = true;
+	}
+}
+
+int service_set_add(service_set *ss, char* name){
+	int i;
+	for (i = 0; i < ss->n; i++){
+		if(ss->arr[i].is_empty){
+			bzero(ss->arr[i].name,NAME_LENGTH);
+			strcpy(ss->arr[i].name,name);
+			ss->arr[i].is_empty = false;
+			return 0;
+		}
+	}
+	return 1;
+}
+
+int service_set_update(service_set *ss, char* name, int fd){
+	int i;
+	for (i = 0; i < ss->n; i++){
+		if(!ss->arr[i].is_empty && strcmp(ss->arr[i].name,name)==0){
+			ss->arr[i].fd = fd;
+			return 0;
+		}
+	}
+	return 1;
+}
+/*
+ * Removes all elements from s equal to val.
+ * Returns number of removed elements.
+ */
+int service_set_remove(service_set *ss, char* name){
+	int i, c = 0;
+	for (i = 0; i < ss->n; i++){
+		if(strcmp(ss->arr[i].name, name)==0 && !ss->arr[i].is_empty){
+			ss->arr[i].is_empty = true;
+			c++;
+		}
+	}
+	return c;
+}
+int service_set_count(service_set *ss){
+	int i, c = 0;
+	for (i = 0; i < ss->n; i++)
+		if(ss->arr[i].is_empty == true)
+			c++;
+	return c;
+}
+
+
+
+
+
+void client_set_init(client_set *cs, int n){
+	int i;
+	if(n>=SET_MAX)
+		ERR("set:");
+	cs->n = n;
+	for (i = 0; i < cs->n; i++){
+		cs->arr[i].is_empty = true;
+	}
+}
+
+int client_set_add(client_set *cs, char* name){
+	int i;
+	for (i = 0; i < cs->n; i++){
+		if(cs->arr[i].is_empty){
+			bzero(cs->arr[i].name,NAME_LENGTH);
+			strcpy(cs->arr[i].name,name);
+			cs->arr[i].is_empty = false;
+			return 0;
+		}
+	}
+	return 1;
+}
+
+int client_set_update(client_set *cs, char* name, int fd){
+	int i;
+	for (i = 0; i < cs->n; i++){
+		if(!cs->arr[i].is_empty && strcmp(cs->arr[i].name,name)==0){
+			cs->arr[i].fd = fd;
+			return 0;
+		}
+	}
+	return 1;
+}
+/*
+ * Removes all elements from s equal to val.
+ * Returns number of removed elements.
+ */
+int client_set_remove(client_set *cs, char* name){
+	int i, c = 0;
+	for (i = 0; i < cs->n; i++){
+		if(strcmp(cs->arr[i].name, name)==0 && !cs->arr[i].is_empty){
+			cs->arr[i].is_empty = true;
+			c++;
+		}
+	}
+	return c;
+}
+int client_set_count(service_set *cs){
+	int i, c = 0;
+	for (i = 0; i < cs->n; i++)
+		if(cs->arr[i].is_empty == true)
+			c++;
+	return c;
+}
+
+
+
+int main(int argc , char *argv[]){
+
+	
+    exit(EXIT_SUCCESS);
+}
 
 //#define NAME_LENGTH 17
 //#define FLOAT_LENGTH 49
@@ -447,3 +590,102 @@
 ////}
 
 
+
+//int admin_process(int sockfd, int fdmax){
+	//char buf[MSG_SIZE];
+	//fd_set afds;
+	//int afd;//file descriptor admina
+	//bool is_authenticated = false;
+	
+	//if ((afd = TEMP_FAILURE_RETRY(accept(sockfd, NULL, NULL))) == -1)
+		//ERR("Cannot accept connection");
+	//FD_SET(afd, &afds);
+	//puts("odebrano połączenie");
+	////przyszło połączenie od admina
+	//while(true){//zmienić!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+		//if (select(fdmax + 1, &afds, NULL, NULL, NULL) == -1){
+			//if (errno != EINTR) ERR("Cannot select");
+			//else if(stop){
+				//close_all(afds, fdmax);
+				//ERR("SIGINT");
+			//}
+		//}//nieeeeeeeeeeeeeeeee jeeeeeeeeeeeeeest dddddddddddddddobrze curfds
+		//puts("odebrano wiadomość");
+				////słucham państwa
+		//if(bulk_read(afd,buf,MSG_SIZE)<0){
+			////ERR("read");
+			//puts("connection lost");
+			//return 1;
+		//}
+		//puts(buf);
+		//trim(buf,strlen(buf));
+		//puts(buf);
+		//char response[MSG_SIZE];
+		//if(!is_authenticated){
+			//if((is_authenticated = (auth(buf,OWNER)==0)))
+				//strcpy(response,"authentication successful");
+			//else
+				//strcpy(response,"authentication failed");//coś jest nie tak, bo mimo, że idzie admin, to pisze failed
+		//}
+		//else
+			//admin_handle_message(buf, response, is_authenticated);
+		//puts(response);
+		//if(bulk_write(afd,response,MSG_SIZE)<0){
+			////ERR("write");
+			//puts("connection lost");
+			//return 1;
+		//}
+	//}
+//}
+
+//void admin_listen(){
+	//int sockfd = create_socket(ADMIN_PORT);
+	//int fdmax = sockfd + 1;
+	//fd_set sfds;
+	//FD_ZERO(&sfds);
+	//FD_SET(sockfd, &sfds);
+	//while (true){
+		//puts("czekam...");
+		//if (select(fdmax + 1, &sfds, NULL, NULL, NULL) == -1){
+			//if (errno != EINTR) ERR("Cannot select");
+			//else if(stop){
+				//close_all(sfds, fdmax);
+				//ERR("SIGINT");
+			//}
+		//}
+		//if (FD_ISSET(sockfd, &sfds))
+			//admin_process(sockfd, fdmax);
+	//}
+//}
+
+
+
+
+//pipe main server
+
+
+
+
+	//int pipefd[2], i, n=16;
+	//int *pipein = pipefd + 1;
+	//char buf[n];
+	//bzero(buf,n);
+	//if(pipe(pipefd))
+		//ERR("pipe:");
+	
+	//pthread_t thread;
+
+	//if(pthread_create( &thread, NULL, thread_handler, (void*) pipefd))ERR("pthread:");
+	
+	//for( i = 0; ; i++ ){
+		////sleep(1);
+		//sprintf(buf,"%d\n",i);
+		//if(bulk_write(*pipein,buf,16)<0)ERR("write:");
+	//}
+	
+	//pthread_join( thread, NULL);
+	
+	//if(TEMP_FAILURE_RETRY(close(*pipein))<0)
+		//ERR("close:");
+	
+	//return 0;
