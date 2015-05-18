@@ -10,6 +10,7 @@
 #include <time.h>
 #include <pthread.h>
 #include <semaphore.h>
+#include "header.h"
 
 #define ERR(source) (fprintf(stderr,"%s:%d\n",__FILE__,__LINE__),\
                      perror(source),kill(0,SIGKILL),\
@@ -21,45 +22,13 @@
 #define BACKLOG 5
 
 volatile sig_atomic_t stop = 0;
-char bufff[128];
+char bufff[MSG_CONTENT_SIZE];
 
 typedef struct sockinfo{
 	int *fdmax;
 	fd_set *fds;
 }sockinfo;
 
-ssize_t bulk_read(int fd, char *buf, size_t count){
-	int c;
-	size_t len=0;
-	do{
-		c=TEMP_FAILURE_RETRY(read(fd,buf,count));
-		if(c<0) return c;
-		if(0==c) return len;
-		buf+=c;
-		len+=c;
-		count-=c;
-	}while(count>0);
-	return len ;
-}
-ssize_t bulk_write(int fd, char *buf, size_t count){
-	int c;
-	size_t len=0;
-	do{
-		c=TEMP_FAILURE_RETRY(write(fd,buf,count));
-		if(c<0) return c;
-		buf+=c;
-		len+=c;
-		count-=c;
-	}while(count>0);
-	return len ;
-}
-int sethandler( void (*f)(int), int sigNo){
-	struct sigaction act;
-	memset(&act, 0, sizeof(struct sigaction));
-	act.sa_handler = f;
-	if (-1==sigaction(sigNo, &act, NULL)) return -1;
-	return 0;
-}
 
 void sigint_handler(int sig){
 	stop = 1;
@@ -110,14 +79,14 @@ void add(char** parties, int* votes, char* buffer){
 sem_t mutex;
 
 void *thread_handler( void *ptr ){
-	char buf[128];
+	char buf[MSG_CONTENT_SIZE];
 	int i;
 	sockinfo *si = (sockinfo*)ptr;
 	for (i = 0; ; i++){
 		sleep(1);
 		sem_wait(&mutex);
-		bzero(buf,128);
-		snprintf(buf,128,"%d: %s",i,bufff);
+		bzero(buf,MSG_CONTENT_SIZE);
+		snprintf(buf,MSG_CONTENT_SIZE,"%d: %s",i,bufff);
 		multicast(*si->fds, *si->fdmax, buf);
 		puts(buf);
 		sem_post(&mutex); 
@@ -128,7 +97,7 @@ void *thread_handler( void *ptr ){
 
 
 void get_results(char** parties, int* votes, int s, int m, fd_set *fds, int *fdmax){
-	char buf[128];
+	//char buf[MSG_CONTENT_SIZE];
 	int i, clientcount = 0;
 	fd_set mfds, curfds;
 	FD_ZERO(&mfds);
@@ -175,41 +144,23 @@ void get_results(char** parties, int* votes, int s, int m, fd_set *fds, int *fdm
 					
 				}
 				else{
+					puts("siema");
 					sem_wait(&mutex);
-					bzero(buf,128);
-					int q;
-					if((q=bulk_read(i,buf,128))<0){
-						FD_CLR(i,&mfds);
-						FD_CLR(i, fds);
-						if(TEMP_FAILURE_RETRY(close(i))<0)
-							ERR("close:");
-					}else if(q>0){
-						printf("otrzymalem od %d:",i);
-						bzero(bufff,128);
-						strncpy(bufff,buf,128);
-						puts(bufff);
-					}
+					puts("no hej");
+					bzero(bufff,MSG_CONTENT_SIZE);
+					bulk_read(i,bufff,MSG_CONTENT_SIZE);
+					FD_CLR(i,&mfds);
 					sem_post(&mutex); 
+					puts("bye bye");
 				}
 			}
 	}
 	pthread_join( thread1, NULL);
 	sem_destroy(&mutex);
 }
-int create_socket(int port){
-	struct sockaddr_in serv_addr;
-	int sockfd;
-	if ((sockfd = socket(AF_INET, SOCK_STREAM, 0)) < 0) ERR("socket:");
-	memset(&serv_addr, 0, sizeof(struct sockaddr_in));
-	serv_addr.sin_family = AF_INET;
-	serv_addr.sin_addr.s_addr = INADDR_ANY;
-	serv_addr.sin_port = htons(port);
-	if (bind(sockfd, (struct sockaddr *) &serv_addr, sizeof(serv_addr)) < 0) ERR("bind:");
-	if(listen(sockfd, BACKLOG) < 0) ERR("listen");
-	return sockfd;
-}
+
 int main(int argc, char** argv){
-	bzero(bufff,128);
+	bzero(bufff,MSG_CONTENT_SIZE);
 	strcpy(bufff,"bronkobus");
 	char *parties[] = {"ABC", "CDE", "EFG", "GHI", "IJK"};
 	int votes[] = {0, 0, 0, 0, 0}, sockfd, fdmax;
