@@ -304,6 +304,7 @@ void user_listen(){
 	//struct timeval tt = {0,0};
 	while(true){//BRAKUJE OBSŁUGI PRZEPEŁNIENIA SETÓW I ROZŁĄCZENIA SIĘ SERWISU I JAK SERWIS NIE DZIAŁA, A KLIENT CHCE SIĘ POŁĄCZYĆ
 start:
+		puts("czekam");
 		curfds = allfds;
 		if ((select_all_number = select(fdmax + 1, &curfds, NULL, NULL, NULL))<0) perror("select");//jest coś ale nie wiadomo co
 		printf("dostałem %d rzeczy\n",select_all_number);
@@ -382,7 +383,7 @@ start:
 				//trzeba sprawdzić, czy klient jest w bazie
 				select_all_number--;
 				if( bulk_read(celem->fd, message, MSG_SIZE) < 0){
-					puts("read");
+					puts("błąd odczytu");
 					for (k = 0; k < celem->sset.n; k++){
 						if(celem->sset.arr[k].is_empty)
 							continue;
@@ -398,14 +399,23 @@ start:
 
 				wrapped_message msg_from_client;
 				str_to_wrapped_message(message,&msg_from_client,MSG_SIZE);
+				if(msg_from_client.status==DEREGISTER)
+					puts("\n\nDEREGISTER\n\n");
+				
+				printf("\n%s\n",msg_from_client.service_name);
+				printf("%s\n",msg_from_client.client_name);
+				printf("%s\n",msg_from_client.content);
+				printf("%d\n\n",msg_from_client.status);
 				
 				puts("rejestracja");
 				client c;
 				if(db_select_client(msg_from_client.client_name,&c)!=0){puts("nie ma klienta w bazie");}//nie ma w bazie
+				//porównywanie w BAZIE POPRAWIĆ BO BIERZE DŁUGOŚĆ TYLKO TEGO OK
 				else{
 					puts("klient jest w bazie. n=0 więc rejestruję serwis");
 					strcpy(celem->name,c.name);
 					bool is_found = false;
+					//TRZEBA SPRAWDZIĆ CZY W BAZIE MAMY W OGÓLE TAKI SERWIS
 					for (j = 0; j < celem->sset.n; j++){//POPRAWIC
 						if(celem->sset.arr[j].is_empty)
 							continue;
@@ -414,6 +424,7 @@ start:
 							is_found = true;
 							printf("\n\nwysyłam do serwisu: %s\n\n",msg_from_client.content);
 							if( bulk_write(selem->fd, msg_from_client.content, MSG_CONTENT_SIZE) < 0){
+								puts("błąd wysyłania");
 								disconnect(selem->fd, &allfds);
 								client_set_remove_by_fd(&cset,selem->fd);
 								goto start;
@@ -443,6 +454,7 @@ start:
 								client_set_remove_by_fd(&cset,fd);
 								goto start;
 							}
+							puts("wysłałem");
 						}
 					}
 				}
@@ -456,6 +468,7 @@ start:
 				if(FD_ISSET(selem->fd,&curfds)){//mamy coś od serwisu
 					select_all_number--;
 					if( bulk_read(selem->fd, message, MSG_SIZE) < 0){
+						puts("błąd odczytu");
 						disconnect(selem->fd,&allfds);
 						client_set_remove_by_fd(&cset,selem->fd);
 						goto start;
@@ -471,11 +484,13 @@ start:
 					
 					bzero(msg_from_service.client_name,NAME_LENGTH);
 					strcpy(msg_from_service.client_name,celem->name);
+					msg_from_service.status = REGULAR;
 					bzero(message,MSG_SIZE);
 					wrapped_message_to_str(message,msg_from_service,MSG_SIZE);
 					puts("wysyłam2");
 					printf("%s\n",message);
 					if( bulk_write(celem->fd, message, MSG_SIZE) < 0){
+						puts("błąd wysyłania");
 						for (k = 0; k < celem->sset.n; k++){
 							if(celem->sset.arr[k].is_empty)
 								continue;

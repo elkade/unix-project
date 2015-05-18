@@ -22,11 +22,11 @@
 #define BACKLOG 5
 
 volatile sig_atomic_t stop = 0;
-char bufff[MSG_CONTENT_SIZE];
 
 typedef struct sockinfo{
 	int *fdmax;
 	fd_set *fds;
+	char* buf;
 }sockinfo;
 
 
@@ -82,14 +82,16 @@ void *thread_handler( void *ptr ){
 	char buf[MSG_CONTENT_SIZE];
 	int i;
 	sockinfo *si = (sockinfo*)ptr;
+	fd_set fds = *si->fds;
+	strncpy(buf,si->buf,MSG_CONTENT_SIZE);
 	for (i = 0; ; i++){
 		sleep(1);
-		sem_wait(&mutex);
-		bzero(buf,MSG_CONTENT_SIZE);
-		snprintf(buf,MSG_CONTENT_SIZE,"%d: %s",i,bufff);
-		multicast(*si->fds, *si->fdmax, buf);
+		//sem_wait(&mutex);
+		//bzero(buf,MSG_CONTENT_SIZE);
+		//snprintf(buf,MSG_CONTENT_SIZE,"%d: %s",i,buf);
+		multicast(fds, *si->fdmax, buf);
 		puts(buf);
-		sem_post(&mutex); 
+		//sem_post(&mutex); 
 	}
 
 	return NULL;
@@ -97,30 +99,21 @@ void *thread_handler( void *ptr ){
 
 
 void get_results(char** parties, int* votes, int s, int m, fd_set *fds, int *fdmax){
-	//char buf[MSG_CONTENT_SIZE];
+	char buf[MSG_CONTENT_SIZE];
 	int i, clientcount = 0;
+	strcpy(buf,"bronkobus");
 	fd_set mfds, curfds;
 	FD_ZERO(&mfds);
 	FD_SET(s, &mfds);
 	
-	sockinfo si;
-	si.fds = fds;
-	si.fdmax = fdmax;
-	
 	sem_init(&mutex, 0, 1);
-	
-	pthread_t thread1;
+	int a=0;
+	pthread_t thread1[100];
     int iret1;
 
 	//działa ale nie wyrejestrowuje
 	
-	iret1 = pthread_create( &thread1, NULL, thread_handler, (void*) &si);
-    if(iret1){
-        fprintf(stderr,"Error - pthread_create() return code: %d\n",iret1);
-        exit(EXIT_FAILURE);
-    }
 
-	
 	
 	for (curfds = mfds;; curfds = mfds){
 		if (select(*fdmax + 1, &curfds, NULL, NULL, NULL) == -1){
@@ -145,23 +138,36 @@ void get_results(char** parties, int* votes, int s, int m, fd_set *fds, int *fdm
 				}
 				else{
 					puts("siema");
-					sem_wait(&mutex);
 					puts("no hej");
-					bzero(bufff,MSG_CONTENT_SIZE);
-					bulk_read(i,bufff,MSG_CONTENT_SIZE);
+					bzero(buf,MSG_CONTENT_SIZE);
+					bulk_read(i,buf,MSG_CONTENT_SIZE);
+					puts("przeczytałem");
+					puts(buf);
+					sockinfo si;
+					FD_ZERO(fds);
+					FD_SET(i,fds);
+					si.fds = fds;
+					si.fdmax = fdmax;
+					si.buf=buf;
+					iret1 = pthread_create( &thread1[a++], NULL, thread_handler, (void*) &si);
+					if(iret1){
+						fprintf(stderr,"Error - pthread_create() return code: %d\n",iret1);
+						exit(EXIT_FAILURE);
+					}
 					FD_CLR(i,&mfds);
-					sem_post(&mutex); 
 					puts("bye bye");
 				}
 			}
+	}for (i = 0; i < a; i++){
+		pthread_join( thread1[i], NULL);
 	}
-	pthread_join( thread1, NULL);
+	
+	
 	sem_destroy(&mutex);
 }
 
 int main(int argc, char** argv){
-	bzero(bufff,MSG_CONTENT_SIZE);
-	strcpy(bufff,"bronkobus");
+	
 	char *parties[] = {"ABC", "CDE", "EFG", "GHI", "IJK"};
 	int votes[] = {0, 0, 0, 0, 0}, sockfd, fdmax;
 	fd_set fds;

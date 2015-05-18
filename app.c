@@ -36,7 +36,8 @@ int main(int argc , char *argv[]){
 	bzero(message,MSG_SIZE);
 
 	strcpy(message,"kasia cichopek");
-	bulk_write(sockfd, "andrzej duda", MSG_SIZE);
+	read_line(message,MSG_SIZE);
+	bulk_write(sockfd, message /*"andrzej duda"*/, MSG_SIZE);
 		bzero(message,MSG_SIZE);
     while(1){
 		//read_line(message,MSG_SIZE);

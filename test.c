@@ -1,4 +1,5 @@
 #include "header.h"
+#include "wrapped_message.h"
 
 #define SET_MAX 64
 
@@ -150,8 +151,31 @@ int client_set_count(service_set *cs){
 
 
 int main(int argc , char *argv[]){
-
+	char buf[MSG_SIZE];
+	bzero(buf,MSG_SIZE);
+int n = MSG_SIZE;
+	wrapped_message msg_from_app;
+	wrapped_message new;
+	strncpy(msg_from_app.service_name, "multicast", SERVICE_NAME_LENGTH);
+	strncpy(msg_from_app.client_name, "aleksander", NAME_LENGTH);
+	strncpy(msg_from_app.app_name, "0000000000000000", APP_NAME_LENGTH);
+	strncpy(msg_from_app.content, "bbb", MSG_CONTENT_SIZE);
+	msg_from_app.status = REGULAR;
 	
+	printf("%s\n",msg_from_app.app_name);//dodać obsługę app_name
+	printf("%s\n",msg_from_app.service_name);
+	printf("%s\n",msg_from_app.client_name);
+	printf("%s\n",msg_from_app.content);
+	printf("%d\n",msg_from_app.status);
+	
+	wrapped_message_to_str(buf, msg_from_app, n);
+	puts(buf);
+	str_to_wrapped_message(buf, &new,  n);
+	
+	printf("%s\n",new.service_name);
+	printf("%s\n",new.client_name);
+	printf("%s\n",new.content);
+	printf("%d\n",new.status);
     exit(EXIT_SUCCESS);
 }
 

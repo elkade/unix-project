@@ -26,6 +26,7 @@
 #include <time.h>
 #include <netdb.h>
 #include <stropts.h>
+#include <pthread.h>
 
 
 #define ERR(source) (fprintf(stderr,"%s:%d\n",__FILE__,__LINE__),\
@@ -36,7 +37,7 @@
 #define NAME_LENGTH 16
 #define SIZE 128
 #define MSG_SIZE 2048
-#define MSG_CONTENT_SIZE (2048-256)
+#define MSG_CONTENT_SIZE (2048-256-INT_LENGTH)
 #define BACKLOG 5
 
 #define NAME_LENGTH 16
@@ -48,19 +49,12 @@
 
 #define PORT_NUMBER_LENGTH 8
 #define SERVICE_NAME_LENGTH 16
+#define APP_NAME_LENGTH 16
 #define HOST_NAME_LENGTH 16
 #define SERVICE_DISPLAY_SIZE 128
 
 #define MAX_SOCKETS_TO_ONE_PORT 16
 
-
-
-typedef struct local_endpoint{
-	char port_number[PORT_NUMBER_LENGTH];
-	char service_name[SERVICE_NAME_LENGTH];
-	int sockfd;
-	fd_set fds;
-}local_endpoint;
 
 static struct termios old, new;
 
