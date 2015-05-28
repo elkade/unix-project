@@ -85,7 +85,12 @@ int send_service_disconnected(int client_fd, char* service_name){
 	return 0;
 }
 
-void *thread_handler( void *ptr ){
+void *admin_thread_handler( void *ptr ){
+	//bool is_authenticated = false;
+	return NULL;
+}
+
+void *user_thread_handler( void *ptr ){
 	puts("nowy wątek");
 	thread_data td = *((thread_data*) ptr);
 	puts(td.first_message);
@@ -95,23 +100,20 @@ void *thread_handler( void *ptr ){
 	bzero(name,NAME_LENGTH);
 	int *fdmax = td.fdmax, i, j, k;
 	fd_set curfds, allfds;
-	//bool is_authenticated = false;
+	
 	
 	FD_ZERO(&allfds);
 	
 	addnewfd_listen(td.client_fd,&allfds,fdmax);
 	
-	//int m = 128;
-	int n = 128;
-	single_set sset;
-	single_set_init(&sset,n);
+	int m = 128;//ile serwisów
+	int n = 128;//ile aplikacji do serwisu
+	double_set servset;//many services -> many apps
+	double_set_init(&servset,m);
+	
+	//single_set sset;
+	//single_set_init(&sset,n);
 	puts("czekam na register");
-	//int select_all_number;
-	//if((bulk = bulk_read(client_fd, message, MSG_SIZE) ) == 0 || (bulk < 0 && errno == EPIPE)){
-		//puts("błąd odczytu");
-		//disconnect(client_fd, &allfds);
-		//return NULL;
-	//}else if(bulk<0) ERR("read:");
 	wrapped_message msg_from_client;
 	str_to_wrapped_message(td.first_message,&msg_from_client,MSG_SIZE);
 	if(msg_from_client.status!=REGISTER){
@@ -121,62 +123,9 @@ void *thread_handler( void *ptr ){
 	}
 	strcpy(name,msg_from_client.client_name);
 	puts(name);
-	//puts("rejestracja");
-	//client c;
-	//if(db_select_client(msg_from_client.client_name,&c)!=0){puts("nie ma klienta w bazie");}//nie ma w bazie
-	////porównywanie w BAZIE POPRAWIĆ BO BIERZE DŁUGOŚĆ TYLKO TEGO OK
-	//else{
-		//puts("klient jest w bazie. n=0 więc rejestruję serwis");
-		//strcpy(name,c.name);
-		//bool is_found = false;
-		//for (j = 0; j < sset.n; j++){
-			//if(sset.arr[j].is_empty)
-				//continue;
-			//single_set_elem selem = sset.arr[j];
-			//if(strcmp(selem.name, msg_from_client.service_name)==0){
-				//is_found = true;
-				//printf("\n\nwysyłam do serwisu: %s\n\n",msg_from_client.content);
-				//if( bulk_write(selem.fd, msg_from_client.content, MSG_CONTENT_SIZE) < 0){
-					//puts("błąd wysyłania");
-					//disconnect(selem.fd, &allfds);
-					//send_service_disconnected(client_fd, msg_from_client.service_name);
-					//goto start;
-				//}
-				//puts("wysyłam1");
-				//printf("%s\n",msg_from_client.content);
-			//}
-		//}
-		//if(!is_found){
-			//printf("%s\n",message);
-			//service s;
-			////trzeba sprawdzić, czy taki serwis jest w ogóle w bazie
-			//if(db_select_service(msg_from_client.service_name,&s)!=0){puts("nie ma serwisu w bazie");}//nie znaleziono - trzeba zamknąć fd
-			//else{
-				//puts("rejestruje serwis");
-				//int fd = create_socket_client(s.host_name,atoi(s.port_number));
-				
-				//single_set_add_by_fd(&sset, fd);
-				
-				//single_set_update_by_fd(&sset, fd, s.name);
-				
-				//addnewfd_listen(fd,&allfds,fdmax);
-				//printf("\n\nwysyłam do serwisu: %s\n\n",msg_from_client.content);
-				//if( bulk_write(fd, msg_from_client.content, MSG_CONTENT_SIZE) < 0){
-					//puts("write");
-					//disconnect(fd, &allfds);
-					//send_service_disconnected(client_fd, msg_from_client.service_name);
-					//goto start;
-				//}
-				//puts("wysłałem");
-			//}
-		//}
-	//}
-	
-	
-	
-	
-	
-	
+
+
+
 	int select_all_number;
 	
 	while(true){//BRAKUJE OBSŁUGI PRZEPEŁNIENIA SETÓW I ROZŁĄCZENIA SIĘ SERWISU I JAK SERWIS NIE DZIAŁA, A KLIENT CHCE SIĘ POŁĄCZYĆ
@@ -197,11 +146,12 @@ start:
 		puts("dostałem coś od klienta");
 		if((bulk = bulk_read(client_fd, message, MSG_SIZE) ) == 0 || (bulk < 0 && errno == EPIPE)){
 			puts("błąd odczytu");
-			for (k = 0; k < sset.n; k++){
-				if(sset.arr[k].is_empty)
+			for (k = 0; k < servset.n; k++){
+				if(servset.arr[k].is_empty)
 					continue;
-				disconnect(sset.arr[k].fd, &allfds);
-				single_set_remove_by_fd(&sset,sset.arr[k].fd);
+					//DLA KAŻDEJ APLIKACJI
+				//disconnect(servset.arr[k].fd, &allfds);
+				//double_set_remove_by_fd(&servset,servset.arr[k].fd);
 			}
 			disconnect(client_fd, &allfds);
 			//client_set_remove_by_fd(&cset,celem->fd);
@@ -215,12 +165,27 @@ start:
 
 		wrapped_message msg_from_client;
 		str_to_wrapped_message(message,&msg_from_client,MSG_SIZE);
-		if(msg_from_client.status==DEREGISTER)
+		if(msg_from_client.status==DEREGISTER){
 			puts("\n\nDEREGISTER\n\n");
+			double_set_elem *dsm;
+			single_set_elem *ssm;
+			
+			double_set_select_by_name(&servset,msg_from_client.service_name, &dsm);
+			single_set_select_by_name(&dsm->sset,msg_from_client.app_name,&ssm);
+			
+			shutdown(ssm->fd,SHUT_RDWR);
+			FD_CLR(ssm->fd, &allfds);
+			if(TEMP_FAILURE_RETRY(close(ssm->fd))<0)ERR("close:");
+			single_set_remove_by_fd(&dsm->sset, ssm->fd);
+			if(single_set_count(&dsm->sset)==0)
+				double_set_remove_by_name(&servset, msg_from_client.service_name);
+			goto start;
+		}
 		else if(msg_from_client.status==REGISTER)
 			goto start;
 		printf("\n%s\n",msg_from_client.service_name);
 		printf("%s\n",msg_from_client.client_name);
+		printf("%s\n",msg_from_client.app_name);
 		printf("%s\n",msg_from_client.content);
 		printf("%d\n\n",msg_from_client.status);
 		
@@ -237,35 +202,57 @@ start:
 				send_service_disconnected(client_fd, msg_from_client.service_name);
 				goto start;
 			}
-			strcpy(name,c.name);
-			bool is_found = false;
-			for (j = 0; j < sset.n; j++){//POPRAWIC
-				if(sset.arr[j].is_empty)
+			//strcpy(name,c.name);
+			bool is_found_service = false;
+			bool is_found_app = false;
+			double_set_elem* servelem;
+			for (j = 0; j < servset.n; j++){
+				if(servset.arr[j].is_empty)
 					continue;
-				single_set_elem selem = sset.arr[j];
-				if(strcmp(selem.name, msg_from_client.service_name)==0){
-					is_found = true;
-					printf("\n\nwysyłam do serwisu: %s\n\n",msg_from_client.content);
-					if((bulk = bulk_write(selem.fd, msg_from_client.content, MSG_CONTENT_SIZE) ) == 0 || (bulk < 0 && errno == EPIPE)){
-						puts("błąd wysyłania");
-						disconnect(selem.fd, &allfds);
-						send_service_disconnected(client_fd, msg_from_client.service_name);
-						goto start;
-					}else if(bulk<0) ERR("write:");
-					puts("wysyłam1");
-					printf("%s\n",msg_from_client.content);
+				servelem = &servset.arr[j];
+				if(strcmp(servelem->name, msg_from_client.service_name)==0){
+					puts("mam service");
+					is_found_service = true;
+					for (k = 0; k < servset.arr[j].sset.n; k++)	{
+						if(servset.arr[j].is_empty)
+							continue;
+						single_set_elem appelem = servset.arr[j].sset.arr[k];
+						if(strcmp(appelem.name, msg_from_client.app_name)==0){
+							puts("mam app");
+							is_found_app = true;
+							printf("\n\nwysyłam do serwisu: %s\n\n",msg_from_client.content);
+							if((bulk = bulk_write(appelem.fd, msg_from_client.content, MSG_CONTENT_SIZE) ) == 0 ||
+									(bulk < 0 && errno == EPIPE)){
+								puts("błąd wysyłania");
+								disconnect(appelem.fd, &allfds);
+								send_service_disconnected(client_fd, msg_from_client.service_name);
+								goto start;
+							}else if(bulk<0) ERR("write:");
+							puts("wysyłam1");
+							printf("%s\n",msg_from_client.content);
+							//break;//znaleziono
+						}
+					}
+					//break;//znaleziono
 				}
 			}
-			if(!is_found){
+			if(!is_found_service){
+				puts("rejestruję serwis");
+				double_set_add_by_name(&servset, s.name, n);
+				double_set_select_by_name(&servset, s.name,&servelem);
+			}
+			puts(servelem->name);
+			if(!is_found_app){
 				printf("%s\n",message);
-				puts("rejestruje serwis");
+				
 				int fd = create_socket_client(s.host_name,atoi(s.port_number));
+				printf("rejestruję aplikację fd: %d\n",fd);
+				single_set_add_by_fd(&servelem->sset, fd);
 				
-				single_set_add_by_fd(&sset, fd);
-				
-				single_set_update_by_fd(&sset, fd, s.name);
+				single_set_update_by_fd(&servelem->sset, fd, msg_from_client.app_name);
 				
 				addnewfd_listen(fd,&allfds,fdmax);
+				
 				printf("\n\nwysyłam do serwisu: %s\n\n",msg_from_client.content);
 				if((bulk = bulk_write(fd, msg_from_client.content, MSG_CONTENT_SIZE) ) == 0 || (bulk < 0 && errno == EPIPE)){
 					puts("write");
@@ -276,23 +263,29 @@ start:
 				else if(bulk<0) ERR("write:");
 				puts("wysłałem");
 			}
-			puts("wychodzę za klamrę");
 		}
 	}else{
 		puts("dostałem coś od serwisu");
 		if(select_all_number<=0) goto start;
 		puts("nie wróciłem jeszcze na start - szukam serwisu");
-		for (j = 0; j < sset.n; j++){//dla każdego serwisu
-			if(sset.arr[j].is_empty)
+		for (j = 0; j < servset.n; j++){//dla każdego serwisu
+			//puts("pętla");
+			if(servset.arr[j].is_empty)
 				continue;
-			single_set_elem selem = sset.arr[j];
-			printf("sprawdzam serwis %d\to fd %d\n",j,selem.fd);
-			if(FD_ISSET(selem.fd,&curfds)){//mamy coś od serwisu
+			double_set_elem servelem = servset.arr[j];
+			printf("sprawdzam serwis %d\n",j);
+			for (k = 0; k < servelem.sset.n; k++)	{//dlla każdej aplikacji
+				//puts("pętla");
+				if(servelem.sset.arr[k].is_empty)
+					continue;
+				single_set_elem appelem = servelem.sset.arr[k];
+				printf("sprawdzam aplikację %d\to fd %d\n",k,appelem.fd);
+			if(FD_ISSET(appelem.fd,&curfds)){//mamy coś od serwisu
 				puts("mam coś od tego serwisu");
 				select_all_number--;
-				if((bulk = bulk_read(selem.fd, message, MSG_SIZE) ) == 0 || (bulk < 0 && errno == EPIPE)){
+				if((bulk = bulk_read(appelem.fd, message, MSG_SIZE) ) == 0 || (bulk < 0 && errno == EPIPE)){
 					puts("błąd odczytu");
-					disconnect(selem.fd, &allfds);
+					disconnect(appelem.fd, &allfds);
 					send_service_disconnected(client_fd, msg_from_client.service_name);
 					goto start;
 				}else if(bulk < 0)
@@ -304,7 +297,10 @@ start:
 				strcpy(msg_from_service.content,message);
 				
 				bzero(msg_from_service.service_name,SERVICE_NAME_LENGTH);
-				strcpy(msg_from_service.service_name,selem.name);
+				strcpy(msg_from_service.service_name,servelem.name);
+				
+				bzero(msg_from_service.app_name,APP_NAME_LENGTH);
+				strcpy(msg_from_service.app_name,appelem.name);
 				
 				bzero(msg_from_service.client_name,NAME_LENGTH);
 				strcpy(msg_from_service.client_name,name);
@@ -315,20 +311,23 @@ start:
 				printf("%s\n",message);
 				if( (bulk = bulk_write(client_fd, message, MSG_SIZE) ) == 0 || (bulk < 0 /*&& errno == EPIPE*/)){
 					puts("błąd wysyłania");
-					for (k = 0; k < sset.n; k++){
-						if(sset.arr[k].is_empty)
+					for (k = 0; k < servset.n; k++){
+						if(servset.arr[k].is_empty)
 							continue;
 						printf("odłączam serwis. k=%d\n",k);
-						disconnect(sset.arr[k].fd, &allfds);
-						single_set_remove_by_fd(&sset,sset.arr[k].fd);
+						//DLA KAŻDEJ APLIKACJI
+						//disconnect(servset.arr[k].fd, &allfds);
+						//double_set_remove_by_fd(&servset,servset.arr[k].fd);
 					}
 					puts("odłączam klienta");
 					disconnect(client_fd,&allfds);
 					//client_set_remove_by_fd(&cset,celem->fd);
 					goto end;
 				}else if(bulk<0)ERR("write:");//TRZEBA JESZCZE INNE BŁĘDY OBSŁUGIWAĆ
+				if(select_all_number<=0) goto start;
 			}
 			if(select_all_number<=0) goto start;
+			}
 		}
 		if(select_all_number<=0) goto start;
 	}
@@ -431,9 +430,7 @@ start:
 			printf("główny: przydzialem: %d\n",fd);
 		}
 		if(select_all_number<=0) goto start;
-		
-		
-		
+
 		for (i = 0; i < cset.n; i++){//dla każdego zarejestrowanego klienta
 			if(cset.arr[i].is_empty)
 				continue;
@@ -454,8 +451,6 @@ start:
 
 				wrapped_message msg_from_client;
 				str_to_wrapped_message(message,&msg_from_client,MSG_SIZE);
-				if(msg_from_client.status==DEREGISTER)
-					puts("\n\nDEREGISTER\n\n");
 				
 				printf("główny: \n%s\n",msg_from_client.service_name);
 				printf("główny: %s\n",msg_from_client.client_name);
@@ -469,14 +464,14 @@ start:
 				strncpy(td[thread_num].first_message, message,MSG_SIZE);
 				td[thread_num].fdmax = &fdmax;
 				td[thread_num].client_fd = cset.arr[i].fd;
-				if(pthread_create( &thread[thread_num], NULL, thread_handler, (void*)&td[thread_num]))
+				if(pthread_create( &thread[thread_num], NULL, user_thread_handler, (void*)&td[thread_num]))
 					ERR("pthread:");
 				
 				FD_CLR(celem->fd,&allfds);
 				single_set_remove_by_fd(&cset,celem->fd);
 				thread_num++;
-}
-}
+			}
+		}
 }
 
 

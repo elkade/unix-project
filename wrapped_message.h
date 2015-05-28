@@ -37,6 +37,15 @@ void str_to_wrapped_message(char* message, wrapped_message *msg, int n){
 	offset+=atoi(buf);
 	//printf("%d\n",offset);
 	
+	bzero(msg->app_name,APP_NAME_LENGTH);
+	bzero(buf,MSG_SIZE);
+	strncpy(buf,message + offset,INT_LENGTH);
+	offset += INT_LENGTH;
+	//printf("%d\n",atoi(buf));
+	strncpy(msg->app_name,message+offset,atoi(buf));
+	offset+=atoi(buf);
+	//printf("%d\n",offset);
+	
 	bzero(msg->content,MSG_CONTENT_SIZE);
 	bzero(buf,MSG_SIZE);
 	strncpy(buf,message + offset,INT_LENGTH);
@@ -70,6 +79,13 @@ void wrapped_message_to_str(char* buf, wrapped_message msg, int n){
 	strncat(buf,buf2,strlen(buf2));
 	bzero(buf2,MSG_SIZE);
 	snprintf(buf2, NAME_LENGTH+1, "%s", msg.client_name);
+	strncat(buf,buf2,strlen(buf2));
+	bzero(buf2,MSG_SIZE);
+	
+	snprintf(buf2, INT_LENGTH+1, "%.*ld", INT_LENGTH , strlen(msg.app_name));
+	strncat(buf,buf2,strlen(buf2));
+	bzero(buf2,MSG_SIZE);
+	snprintf(buf2, APP_NAME_LENGTH+1, "%s", msg.app_name);
 	strncat(buf,buf2,strlen(buf2));
 	bzero(buf2,MSG_SIZE);
 	
