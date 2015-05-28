@@ -80,12 +80,15 @@ sem_t mutex;
 
 void *thread_handler( void *ptr ){
 	char buf[MSG_CONTENT_SIZE];
+	char buf2[MSG_CONTENT_SIZE];
+	bzero(buf2,MSG_CONTENT_SIZE);
 	int i;
 	sockinfo *si = (sockinfo*)ptr;
 	fd_set fds = *si->fds;
-	strncpy(buf,si->buf,MSG_CONTENT_SIZE);
+	strncpy(buf2,si->buf,MSG_CONTENT_SIZE);
 	for (i = 0; ; i++){
 		sleep(1);
+		snprintf(buf,MSG_CONTENT_SIZE,"%d: %s",i,buf2);
 		//sem_wait(&mutex);
 		//bzero(buf,MSG_CONTENT_SIZE);
 		//snprintf(buf,MSG_CONTENT_SIZE,"%d: %s",i,buf);

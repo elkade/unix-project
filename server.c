@@ -375,7 +375,7 @@ start:
 				printf("główny: %d\n",i);
 			}
 		}
-		sleep(1);
+		//sleep(1);
 		if(FD_ISSET(admin_listen_socket,&curfds)){
 			select_all_number--;
 			printf("główny: %s\n","admin chce się połączyć");

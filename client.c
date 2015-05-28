@@ -114,7 +114,7 @@ start:
 				printf("%d\n",i);
 			}
 		}
-		sleep(1);
+		//sleep(1);
 		if(FD_ISSET(serverfd,&curfds)){
 			select_all_number--;
 			if( (bulk = bulk_read(serverfd, message, MSG_SIZE) ) == 0 || (bulk < 0 && errno == EPIPE)){
@@ -147,7 +147,7 @@ start:
 				if(aset.arr[i].is_empty)
 					continue;
 				if(strncmp(aset.arr[i].name, msg_from_server.app_name, APP_NAME_LENGTH)==0){
-					if( (bulk = bulk_write(aset.arr[i].fd, msg_from_server.content,MSG_SIZE) ) == 0 || (bulk < 0 && errno == EPIPE)){
+					if( (bulk = bulk_write(aset.arr[i].fd, msg_from_server.content,MSG_SIZE) ) == 0 || (bulk < 0 /*&& errno == EPIPE*/)){
 						puts("app stopped working");
 						FD_CLR(aset.arr[i].fd,&allfds);
 						single_set_remove_by_fd(&aset,aset.arr[i].fd);
