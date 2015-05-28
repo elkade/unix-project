@@ -31,7 +31,7 @@ int main(int argc , char *argv[]){
 	int sockfd;
     //if(argc!=3) usage();
     if(sethandler(SIG_IGN,SIGPIPE)) ERR("Setting SIGPIPE:");
-    sockfd = create_socket_client("127.0.0.1",atoi("9998"));
+    sockfd = create_socket_client("127.0.0.1",/*atoi("9998")*/ADMIN_PORT);
     puts("connected");
 	bzero(message,MSG_SIZE);
     while(1){

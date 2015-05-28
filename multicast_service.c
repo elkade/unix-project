@@ -101,7 +101,7 @@ void *thread_handler( void *ptr ){
 void get_results(char** parties, int* votes, int s, int m, fd_set *fds, int *fdmax){
 	char buf[MSG_CONTENT_SIZE];
 	int i, clientcount = 0;
-	strcpy(buf,"bronkobus");
+	strcpy(buf,"service message");
 	fd_set mfds, curfds;
 	FD_ZERO(&mfds);
 	FD_SET(s, &mfds);

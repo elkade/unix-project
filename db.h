@@ -8,7 +8,7 @@ static const char SERVICES_DB_NAME_BUF[] = "services_buf.txt";
 int db_row_to_client(char* db_row, client* c ){
 	char buf[MAX_DB_LINE_LENGTH];
 	bzero(buf,MAX_DB_LINE_LENGTH);
-	puts("DESERIALIZACJA\n");
+	//puts("DESERIALIZACJA\n");
 	
 	strncpy(buf,db_row,INT_LENGTH);
 	//	printf("buf: %s\n",buf);
@@ -16,7 +16,7 @@ int db_row_to_client(char* db_row, client* c ){
 	int offset = atoi(buf);
 	//printf("offset: %d\n",offset);
 	strncpy(c->name,db_row+INT_LENGTH,offset);
-			printf("name: %s\n",c->name);
+	//		printf("name: %s\n",c->name);
 	offset+=INT_LENGTH;
 	//	printf("offset: %d\n",offset);
 	bzero(buf,MAX_DB_LINE_LENGTH);
@@ -53,7 +53,7 @@ int client_to_db_row(client* c, char* buf){
 	char buf2[MAX_DB_LINE_LENGTH];
 	bzero(buf,MAX_DB_LINE_LENGTH);
 	bzero(buf2,MAX_DB_LINE_LENGTH);
-		puts("SERIALIZACJA\n");
+		//puts("SERIALIZACJA\n");
 
 	//printf("%s\t%ld\n",c->name,strlen(c->name));
 	
@@ -91,7 +91,7 @@ int db_insert_client(client* c){
 }
 int db_select_client(char* name, client* c){
 	FILE *f;
-	printf("szukam klienta: %s\t%ld\n", name, strlen(name));
+	//printf("szukam klienta: %s\t%ld\n", name, strlen(name));
 	f = fopen(CLIENTS_DB_NAME, "r");
 	if (f == NULL){
 		perror("Nie udalo sie otworzyc pliku notatki.txt");

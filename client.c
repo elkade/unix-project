@@ -1,5 +1,6 @@
 #define _GNU_SOURCE 
 
+#include <semaphore.h>
 #include "header.h"
 #include "wrapped_message.h"
 #include "set.h"
@@ -9,8 +10,7 @@
 		     		     exit(EXIT_FAILURE))
 #define MSG_SIZE 2048
 #define BACKLOG 5
-
-
+sem_t mutex;
 
 void usage(){
 	printf("./client <adres IPv4> <port> \n");
@@ -37,43 +37,72 @@ typedef struct thread_data{
 	int *fdmax;
 }thread_data;
 
+int send_register(int serverfd, char* client_name){
+	char message[MSG_SIZE];
+	bzero(message,MSG_SIZE);
+	wrapped_message msg;
+	bzero(msg.content,MSG_CONTENT_SIZE);
+	strcpy(msg.content,"");
+	
+	bzero(msg.service_name,SERVICE_NAME_LENGTH);
+	strcpy(msg.service_name,"");
+	
+	bzero(msg.client_name,NAME_LENGTH);
+	strcpy(msg.client_name,client_name);
+	msg.status = REGISTER;
+	bzero(message,MSG_SIZE);
+	wrapped_message_to_str(message,msg,MSG_SIZE);
+	puts("wysyłam2");
+	printf("%s\n",message);
+	if( bulk_write(serverfd, message, MSG_SIZE) < 0){
+		puts("błąd wysyłania");
+		return 1;
+	}
+	return 0;
+}
+
 void *thread_handler( void *ptr ){
 	puts("starting thread");
-	thread_data *td = (thread_data*) ptr;
+	thread_data td = *((thread_data*) ptr);
 	fd_set allfds, curfds, serverfds;
 	FD_ZERO(&allfds);
 	FD_ZERO(&serverfds);
 	
-	puts(td->service_name);
-	puts(td->client_name);
-	puts(td->remote_port_number);
-	puts(td->local_port_number);
+	puts(td.service_name);
+	puts(td.client_name);
+	puts(td.remote_port_number);
+	puts(td.local_port_number);
 	
+	int *fdmax = td.fdmax, i, m=4, next_app_id = 0, bulk;//n to max liczba aplikacji
+	puts("tworzę socket oczekujący");
+	int sockfd = create_socket(atoi(td.local_port_number));
+	puts("stworzyłem");
 	
-	int *fdmax = td->fdmax, i, m=4, next_app_id = 0, bulk;//n to max liczba aplikacji
-
-	int sockfd = create_socket(atoi(td->local_port_number));
+	sem_wait(&mutex);
 	addnewfd_listen(sockfd,&allfds,fdmax);//LOCK
-
-
+	sem_post(&mutex);
 	//OBSŁUŻYĆ MOŻLIWOŚĆ PRZEPEŁNIENIA SETU
 
 
 
-	char message[MSG_SIZE], *client_name = td->client_name, *service_name = td->service_name;
-
-	service_set aset;
-	service_set_init(&aset,m);
+	char message[MSG_SIZE], *client_name = td.client_name, *service_name = td.service_name;
+	single_set aset;
+	single_set_init(&aset,m);
 	
-	int serverfd = create_socket_client("127.0.0.1",atoi(td->remote_port_number));
+	printf("łączę się z portem %d\n",atoi(td.remote_port_number));
+	int serverfd = create_socket_client("127.0.0.1",atoi(td.remote_port_number));
+	puts("połączyłem");
+	
+	sem_wait(&mutex);
 	addnewfd_listen(serverfd,&allfds,fdmax);//lock
+	sem_post(&mutex);
 
 	bzero(message,MSG_SIZE);
-	
+	send_register(serverfd, td.client_name);
 	int select_all_number;
-	
 	while(true){
 start:
+		puts("czekam");
 		curfds = allfds;
 		if ((select_all_number = select(*fdmax + 1, &curfds, NULL, NULL, NULL))<0)
 			perror("select");
@@ -104,6 +133,11 @@ start:
 			printf("%s\n",msg_from_server.client_name);
 			printf("%s\n",msg_from_server.content);
 			
+			if(msg_from_server.status==SERVICE_DISCONNECTED){
+				puts("\n\n\n\n\nSERWIS ROZŁĄCZONY\n\n\n\n\n");
+				goto end;
+			}
+			
 			if(strncmp(msg_from_server.client_name,client_name,NAME_LENGTH)==0)
 				printf("dobry klient\n");
 			else
@@ -116,7 +150,7 @@ start:
 					if( (bulk = bulk_write(aset.arr[i].fd, msg_from_server.content,MSG_SIZE) ) == 0 || (bulk < 0 && errno == EPIPE)){
 						puts("app stopped working");
 						FD_CLR(aset.arr[i].fd,&allfds);
-						service_set_remove_by_fd(&aset,aset.arr[i].fd);
+						single_set_remove_by_fd(&aset,aset.arr[i].fd);
 						wrapped_message msg_from_app;
 						strncpy(msg_from_app.service_name, service_name, SERVICE_NAME_LENGTH);
 						strncpy(msg_from_app.client_name, client_name, NAME_LENGTH);
@@ -146,12 +180,13 @@ start:
 			bzero(buf, APP_NAME_LENGTH);
 			snprintf(buf, APP_NAME_LENGTH, "%d", next_app_id++);
 			select_all_number--;
+			sem_wait(&mutex);
 			int newfd = addnewfd(sockfd,&allfds,fdmax);//lock
-			service_set_add_by_fd(&aset, newfd);
-			service_set_update_by_fd(&aset, newfd, buf);
+			sem_post(&mutex);
+			single_set_add_by_fd(&aset, newfd);
+			single_set_update_by_fd(&aset, newfd, buf);
 			printf("przydzieliłem nowemu fd: %d name: %s\n",newfd, buf);
-		}
-		
+		}		
 		if(select_all_number<=0) goto start;
 		puts("szukam na liście aplikacji bo coś od nich dostałem");
 		for (i = 0; i < aset.n; i++){
@@ -168,7 +203,7 @@ start:
 					puts("app stopped working");
 					//tu trzeba wywołać jakąś funkcję, która by usuwała z setu i fdmax zmieniała
 					FD_CLR(aset.arr[i].fd,&allfds);
-					service_set_remove_by_fd(&aset,aset.arr[i].fd);
+					single_set_remove_by_fd(&aset,aset.arr[i].fd);
 					strncpy(msg_from_app.content, "", MSG_CONTENT_SIZE);
 					msg_from_app.status = DEREGISTER;
 				}else if(bulk < 0)
@@ -209,27 +244,30 @@ end:
 	return NULL;
 }
 
+
 int main(int argc , char *argv[]){
 	char name[NAME_LENGTH];
-	int n = 2, i;//i to indeksator
-	thread_data endpoints[n];
+	int n = 1, i;//i to indeksator
+	thread_data td[n];
 	int fdmax = 2, port[]={5578,5571};
 	
 	strcpy(name,"aleksander");
+	
+	sem_init(&mutex, 0, 1);
 	
 	pthread_t thread[n];
 
 	if(sethandler(SIG_IGN,SIGPIPE)) ERR("Setting SIGPIPE:");
 	puts("before init");
 	for (i = 0; i < n; i++){
-		int_to_str(endpoints[i].local_port_number,PORT_NUMBER_LENGTH,port[i]);
-		int_to_str(endpoints[i].remote_port_number,PORT_NUMBER_LENGTH,USER_PORT);
-		strncpy(endpoints[i].service_name,"multicast",SERVICE_NAME_LENGTH);
+		int_to_str(td[i].local_port_number,PORT_NUMBER_LENGTH,port[i]);
+		int_to_str(td[i].remote_port_number,PORT_NUMBER_LENGTH,USER_PORT);
+		strncpy(td[i].service_name,"multicast",SERVICE_NAME_LENGTH);
 
-		endpoints[i].client_name = name;
-		endpoints[i].fdmax = &fdmax;//fdmaxa zawsze lockować
+		td[i].client_name = name;
+		td[i].fdmax = &fdmax;//fdmaxa zawsze lockować
 		
-		if(pthread_create( &thread[i], NULL, thread_handler, (void*)&endpoints[i]))
+		if(pthread_create( &thread[i], NULL, thread_handler, (void*)&td[i]))
 			ERR("pthread:");
 	}
 	puts("after init");	

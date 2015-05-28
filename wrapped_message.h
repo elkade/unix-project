@@ -1,6 +1,8 @@
 typedef enum message_status{
 	REGULAR,
-	DEREGISTER
+	DEREGISTER,
+	SERVICE_DISCONNECTED,
+	REGISTER
 }message_status;
 
 typedef struct wrapped_message{
