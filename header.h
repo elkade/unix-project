@@ -36,8 +36,8 @@
 #define USER_PORT 5565     
 #define NAME_LENGTH 16
 #define SIZE 128
-#define MSG_SIZE 2048
-#define MSG_CONTENT_SIZE (2048-256-INT_LENGTH)
+#define MSG_SIZE 512
+#define MSG_CONTENT_SIZE (MSG_SIZE-256-INT_LENGTH)
 #define BACKLOG 5
 
 #define NAME_LENGTH 16
@@ -302,4 +302,31 @@ void disconnect(int fd, fd_set *fds){
 	if(TEMP_FAILURE_RETRY(close(fd))<0)
 		ERR("close:");
 	fprintf(stderr,"%d disconnected\n",fd);
+}
+
+
+static const char LOG_FILE_NAME[] = "logs.txt";
+#define LOG_TEXT_MAX_LENGTH 118
+int log_to_file(char* text){
+	//if(LOG_TEXT_MAX_LENGTH>strlen(text))
+	
+	char buf[LOG_TEXT_MAX_LENGTH];
+	bzero(buf, LOG_TEXT_MAX_LENGTH);
+	
+	time_t now;
+    struct tm *lcltime;
+
+    now = time ( NULL );
+    lcltime = localtime ( &now );
+
+    snprintf (buf, LOG_TEXT_MAX_LENGTH, "%d:%d:%d\t%s", lcltime->tm_hour, lcltime->tm_min, lcltime->tm_sec, text);
+
+	
+	FILE *f;
+	//mutex
+	f = fopen(LOG_FILE_NAME, "a");
+	fwrite(buf, 1, strlen(buf), f);
+	fclose(f);
+	//mutex
+	return 0;
 }

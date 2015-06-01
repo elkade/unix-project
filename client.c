@@ -8,7 +8,6 @@
 #define ERR(source) (fprintf(stderr,"%s:%d\n",__FILE__,__LINE__),\
                      perror(source),kill(0,SIGKILL),\
 		     		     exit(EXIT_FAILURE))
-#define MSG_SIZE 2048
 #define BACKLOG 5
 sem_t mutex;
 

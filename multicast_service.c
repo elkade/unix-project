@@ -18,7 +18,6 @@
 #define PARTY_COUNT 5
 #define PARTY_NAME_LENGTH 3
 #define VOTES_LENGTH 4
-#define MSG_SIZE 2048
 #define BACKLOG 5
 
 volatile sig_atomic_t stop = 0;

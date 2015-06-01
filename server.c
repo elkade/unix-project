@@ -5,8 +5,9 @@
 #include "wrapped_message.h"
 #include "set.h"
 #include <pthread.h>
+#include <math.h>
+#include "queue.h"
 volatile sig_atomic_t stop = 0;
-
 
 void admin_listen();
 void user_listen();
@@ -85,10 +86,13 @@ int send_service_disconnected(int client_fd, char* service_name){
 	return 0;
 }
 
+
 void *admin_thread_handler( void *ptr ){
 	//bool is_authenticated = false;
 	return NULL;
 }
+
+
 
 void *user_thread_handler( void *ptr ){
 	puts("nowy wątek");
@@ -111,8 +115,6 @@ void *user_thread_handler( void *ptr ){
 	double_set servset;//many services -> many apps
 	double_set_init(&servset,m);
 	
-	//single_set sset;
-	//single_set_init(&sset,n);
 	puts("czekam na register");
 	wrapped_message msg_from_client;
 	str_to_wrapped_message(td.first_message,&msg_from_client,MSG_SIZE);
@@ -124,15 +126,96 @@ void *user_thread_handler( void *ptr ){
 	strcpy(name,msg_from_client.client_name);
 	puts(name);
 
-
-
+	queue msgq;
+	queue_create(&msgq);//kolejka do obsługi wiadomości PAMIĘTAĆ USUNĄĆ PRZY WYŁĄCZANIU
+	
 	int select_all_number;
+	
+	time_t last_time;
+	time_t cur_time;
+	
+	
+	int capacity = 257;//na sekundę
+	int capa_to_use = capacity;
+	//struct timespec ts = {0,0L};//500000000L
+	struct timeval tv;
+	tv.tv_usec = 0;
+	struct timeval *tv_ptr = NULL;
 	
 	while(true){//BRAKUJE OBSŁUGI PRZEPEŁNIENIA SETÓW I ROZŁĄCZENIA SIĘ SERWISU I JAK SERWIS NIE DZIAŁA, A KLIENT CHCE SIĘ POŁĄCZYĆ
 start:
 	puts("czekam");
-	curfds = allfds;//POPRAWIĆ fdmax NA WSKAŹNIK
-	if ((select_all_number = select(*fdmax + 1, &curfds, NULL, NULL, NULL))<0) perror("select");//jest coś ale nie wiadomo co
+	curfds = allfds;
+	if ((select_all_number = select(*fdmax + 1, &curfds, NULL, NULL, tv_ptr))<0) perror("select");
+	
+	
+					//funkcja do obsługi czasu
+				
+				cur_time = time(NULL);
+				int time_diff = cur_time - last_time;
+				printf("last_time: %ld\n",last_time);
+				printf("cur_time: %ld\n",cur_time);
+				last_time = cur_time;
+				
+				
+				capa_to_use += time_diff * capacity;
+				printf("capa do dyspozycji jeżeli jest coś w kolejce: %d\n",capa_to_use);
+				if(queue_size(&msgq)>0){//czekamy na odpowiednie capacity
+					puts("jest coś w kolejce:");
+					queue_peek(&msgq,message);
+					//~ int msg_size = (int)strlen(message);
+					puts(message);
+					printf("%ld\t%d\t%d\n",strlen(message),capa_to_use,queue_size(&msgq));
+					
+					//~ if(msg_size<=capa_to_use){
+						//~ printf("%d jest mniejsze lub równe od %d\n",msg_size, capa_to_use);
+					//~ }
+					
+					while(((int)strlen(message)<=capa_to_use) && (queue_size(&msgq)>0)){//jest już wystarczająco dużo miejsca
+						puts("jest już wystarczająco dużo miejsca");
+						queue_deq(&msgq,message);
+						if( (bulk = bulk_write(client_fd, message, MSG_SIZE) ) == 0 || (bulk < 0 /*&& errno == EPIPE*/)){
+							puts("błąd wysyłania");
+							for (k = 0; k < servset.n; k++){
+								if(servset.arr[k].is_empty)
+									continue;
+								printf("odłączam serwis. k=%d\n",k);
+								//DLA KAŻDEJ APLIKACJI
+								//disconnect(servset.arr[k].fd, &allfds);
+								//double_set_remove_by_fd(&servset,servset.arr[k].fd);
+							}
+							puts("odłączam klienta");
+							disconnect(client_fd,&allfds);
+							//client_set_remove_by_fd(&cset,celem->fd);
+							goto end;
+						}else if(bulk<0)ERR("write:");//TRZEBA JESZCZE INNE BŁĘDY OBSŁUGIWAĆ
+						
+						capa_to_use -= bulk;
+						printf("po wysłaniu: %ld\t%d\t%d\n",strlen(message),capa_to_use,queue_size(&msgq));
+					}
+					if(queue_size(&msgq)==0){
+						tv_ptr = NULL;
+						puts("nie zostało nic więcej");
+					}
+					else{
+						//brakuje jeszcze miejsca i trzeba czekać
+						puts("zostało coś jeszcze");
+						queue_peek(&msgq,message);
+						tv.tv_sec = ceil((strlen(message) - capa_to_use)/capacity);
+						tv_ptr = &tv;
+						printf("ustawię czas na: %ld\n",tv.tv_sec);
+					}
+				}
+				else{
+					if(time_diff>0)
+						capa_to_use = capacity;
+					else
+						capa_to_use = 0;
+				}
+				
+				//------mamy już dobre capa
+	//teraz można czytać
+	
 	printf("dostałem %d rzeczy\n",select_all_number);
 	puts("fd:");
 	for (i = 0; i < *fdmax+1; i++)
@@ -144,7 +227,7 @@ start:
 	sleep(1);
 	if(FD_ISSET(client_fd,&curfds)){
 		puts("dostałem coś od klienta");
-		if((bulk = bulk_read(client_fd, message, MSG_SIZE) ) == 0 || (bulk < 0 && errno == EPIPE)){
+		if((bulk = bulk_read(client_fd, message, MSG_SIZE) ) == 0 || (bulk < 0 /*&& errno == EPIPE*/)){
 			puts("błąd odczytu");
 			for (k = 0; k < servset.n; k++){
 				if(servset.arr[k].is_empty)
@@ -158,10 +241,10 @@ start:
 			goto end;//po disconnectcie trzeba wyjść z ifa
 		}else if(bulk<0) ERR("read:");
 		puts("otrzymuję1");
-		
-		
-		
 		printf("%s\n",message);
+		
+		
+		
 
 		wrapped_message msg_from_client;
 		str_to_wrapped_message(message,&msg_from_client,MSG_SIZE);
@@ -283,6 +366,9 @@ start:
 			if(FD_ISSET(appelem.fd,&curfds)){//mamy coś od serwisu
 				puts("mam coś od tego serwisu");
 				select_all_number--;
+				
+				//TU DOSTAJĘ OD SERWISU
+				
 				if((bulk = bulk_read(appelem.fd, message, MSG_SIZE) ) == 0 || (bulk < 0 && errno == EPIPE)){
 					puts("błąd odczytu");
 					disconnect(appelem.fd, &allfds);
@@ -290,41 +376,34 @@ start:
 					goto start;
 				}else if(bulk < 0)
 					ERR("read:");
-				puts("otrzymuję2");
-				printf("%s\n",message);
-				wrapped_message msg_from_service;
-				bzero(msg_from_service.content,MSG_CONTENT_SIZE);
-				strcpy(msg_from_service.content,message);
+					
+					
+					
+					
+					//trzeba dodać message na kolejkę		
+					
 				
-				bzero(msg_from_service.service_name,SERVICE_NAME_LENGTH);
-				strcpy(msg_from_service.service_name,servelem.name);
-				
-				bzero(msg_from_service.app_name,APP_NAME_LENGTH);
-				strcpy(msg_from_service.app_name,appelem.name);
-				
-				bzero(msg_from_service.client_name,NAME_LENGTH);
-				strcpy(msg_from_service.client_name,name);
-				msg_from_service.status = REGULAR;
-				bzero(message,MSG_SIZE);
-				wrapped_message_to_str(message,msg_from_service,MSG_SIZE);
-				puts("wysyłam2");
-				printf("%s\n",message);
-				if( (bulk = bulk_write(client_fd, message, MSG_SIZE) ) == 0 || (bulk < 0 /*&& errno == EPIPE*/)){
-					puts("błąd wysyłania");
-					for (k = 0; k < servset.n; k++){
-						if(servset.arr[k].is_empty)
-							continue;
-						printf("odłączam serwis. k=%d\n",k);
-						//DLA KAŻDEJ APLIKACJI
-						//disconnect(servset.arr[k].fd, &allfds);
-						//double_set_remove_by_fd(&servset,servset.arr[k].fd);
-					}
-					puts("odłączam klienta");
-					disconnect(client_fd,&allfds);
-					//client_set_remove_by_fd(&cset,celem->fd);
-					goto end;
-				}else if(bulk<0)ERR("write:");//TRZEBA JESZCZE INNE BŁĘDY OBSŁUGIWAĆ
-				if(select_all_number<=0) goto start;
+					puts("otrzymuję2");
+					printf("%s\n",message);
+					wrapped_message msg_from_service;
+					bzero(msg_from_service.content,MSG_CONTENT_SIZE);
+					strcpy(msg_from_service.content,message);
+					
+					bzero(msg_from_service.service_name,SERVICE_NAME_LENGTH);
+					strcpy(msg_from_service.service_name,servelem.name);
+					
+					bzero(msg_from_service.app_name,APP_NAME_LENGTH);
+					strcpy(msg_from_service.app_name,appelem.name);
+					
+					bzero(msg_from_service.client_name,NAME_LENGTH);
+					strcpy(msg_from_service.client_name,name);
+					msg_from_service.status = REGULAR;
+					bzero(message,MSG_SIZE);
+					wrapped_message_to_str(message,msg_from_service,MSG_SIZE);
+					puts("wysyłam2");
+					printf("%s\n",message);
+					
+					queue_enq(&msgq, message);
 			}
 			if(select_all_number<=0) goto start;
 			}
@@ -342,6 +421,7 @@ void user_listen(){
 	pthread_t thread[256];//DO POPRAWIENIA - raczej na jakiś set
 	thread_data td[256];
 
+	log_to_file("server rozpoczyna działanie\n");
 	
 	char message[MSG_SIZE];
 	int clifd = create_socket(USER_PORT), fdmax, i;
