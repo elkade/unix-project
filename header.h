@@ -205,6 +205,12 @@ int create_socket(int port){
 	int sockfd;
 	if ((sockfd = socket(AF_INET, SOCK_STREAM, 0)) < 0) ERR("socket:");
 	memset(&serv_addr, 0, sizeof(struct sockaddr_in));
+	
+	int so_reuseaddr = 1;
+
+	if(setsockopt(sockfd,SOL_SOCKET,SO_REUSEADDR,&so_reuseaddr,sizeof so_reuseaddr))
+		ERR("sockopt");
+	
 	serv_addr.sin_family = AF_INET;
 	serv_addr.sin_addr.s_addr = INADDR_ANY;
 	serv_addr.sin_port = htons(port);

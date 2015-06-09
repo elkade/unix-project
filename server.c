@@ -135,7 +135,7 @@ void *user_thread_handler( void *ptr ){
 	time_t cur_time;
 	
 	
-	int capacity = 257;//na sekundę
+	int capacity = 100000000;//na sekundę
 	int capa_to_use = capacity;
 	//struct timespec ts = {0,0L};//500000000L
 	struct timeval tv;

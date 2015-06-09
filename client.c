@@ -193,6 +193,7 @@ start:
 			if(aset.arr[i].is_empty)
 				continue;
 			printf("mam na liście fd %d\n",aset.arr[i].fd);
+			//TU GDZIEŚ SIĘ ZATRZYMUJE - pewnie na readzie/wricie
 			if(FD_ISSET(aset.arr[i].fd,&curfds)){
 				select_all_number--;
 				wrapped_message msg_from_app;
@@ -245,7 +246,20 @@ end:
 }
 
 
-int main(int argc , char *argv[]){
+int main(int argc , char *argv[]){	
+	//~ char buf[MSG_SIZE];
+	//~ bzero(buf,MSG_SIZE);
+	//~ 
+	//~ wrapped_message wm;
+	//~ wrapped_message wm2;
+	//~ memset(&wm, 0, sizeof(wrapped_message));
+	//~ strcpy(wm.client_name,"robert");
+	//~ wrapped_message_to_str(buf,wm,MSG_SIZE);
+	//~ str_to_wrapped_message(buf,&wm2,MSG_SIZE);
+	//~ puts(buf);
+	//~ puts(wm2.client_name);
+	//~ return 0;
+	
 	char name[NAME_LENGTH];
 	int n = 1, i;//i to indeksator
 	thread_data td[n];
